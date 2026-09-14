@@ -12,20 +12,21 @@ import {
   UploadCloud,
   RotateCcw,
   Layers,
-  ArrowRight,
-  Server,
   Lock,
   Key,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
   Terminal,
   IndianRupee,
   Smartphone,
-  ExternalLink,
-  ChevronRight,
+  Volume2,
+  VolumeX,
+  Skull,
+  Activity,
   Zap,
 } from "lucide-react";
+import { sounds } from "@/components/SoundEffects";
+import MeshTopologyCanvas from "@/components/MeshTopologyCanvas";
+import MobileDeviceMockup from "@/components/MobileDeviceMockup";
+import AttackStudio from "@/components/AttackStudio";
 
 interface Device {
   deviceId: string;
@@ -66,9 +67,13 @@ interface LogEntry {
 }
 
 export default function Home() {
-  const [apiUrl, setApiUrl] = useState<string>("/backend-api");
+  const [apiUrl, setApiUrl] = useState<string>(
+    process.env.NEXT_PUBLIC_API_URL || "/backend-api"
+  );
   const [backendOnline, setBackendOnline] = useState<boolean>(false);
   const [serverKey, setServerKey] = useState<ServerKeyInfo | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const [activeTab, setActiveTab] = useState<"simulation" | "attack">("simulation");
 
   // Core data states
   const [devices, setDevices] = useState<Device[]>([]);
@@ -77,7 +82,7 @@ export default function Home() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
 
-  // Form states
+  // Mobile / Form states
   const [senderVpa, setSenderVpa] = useState("alice@demo");
   const [receiverVpa, setReceiverVpa] = useState("bob@demo");
   const [amount, setAmount] = useState(500);
@@ -85,7 +90,7 @@ export default function Home() {
   const [ttl, setTtl] = useState(5);
   const [startDevice, setStartDevice] = useState("phone-alice");
 
-  // UI state
+  // Loading states
   const [isInjecting, setIsInjecting] = useState(false);
   const [isGossiping, setIsGossiping] = useState(false);
   const [isFlushing, setIsFlushing] = useState(false);
@@ -140,7 +145,7 @@ export default function Home() {
     }
   }, [apiUrl]);
 
-  // Initial load: Key + Data + Poll
+  // Initial load
   useEffect(() => {
     async function loadKey() {
       try {
@@ -151,7 +156,6 @@ export default function Home() {
           setBackendOnline(true);
         }
       } catch {
-        // Fallback: try direct localhost if proxy failed
         if (apiUrl === "/backend-api") {
           try {
             const direct = await fetch("http://localhost:8080/api/server-key");
@@ -174,10 +178,10 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [apiUrl, refreshData]);
 
-  // 1. Inject payment
-  const handleInject = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // 1. Inject payment into mesh
+  const handleInject = async () => {
     if (senderVpa === receiverVpa) {
+      sounds.playAlert();
       addLog("Sender and receiver cannot be identical", "warning");
       return;
     }
@@ -199,15 +203,18 @@ export default function Home() {
       if (res.ok) {
         const data = await res.json();
         setLastCiphertextPreview(data.ciphertextPreview);
+        sounds.playBleChirp();
         addLog(
-          `📤 Packet [${data.packetId.substring(0, 8)}] created! Encrypted with Server RSA-OAEP + AES-GCM and injected at ${data.injectedAt} (TTL: ${data.ttl})`,
+          `📤 Packet [${data.packetId.substring(0, 8)}] encrypted via RSA-2048 OAEP + AES-256-GCM & injected at ${data.injectedAt} (TTL: ${data.ttl})`,
           "inject"
         );
         refreshData();
       } else {
+        sounds.playAlert();
         addLog(`Injection failed with status ${res.status}`, "error");
       }
     } catch (err: unknown) {
+      sounds.playAlert();
       addLog(`Error injecting packet: ${err instanceof Error ? err.message : String(err)}`, "error");
     } finally {
       setIsInjecting(false);
@@ -217,19 +224,22 @@ export default function Home() {
   // 2. Gossip step
   const handleGossip = async () => {
     setIsGossiping(true);
+    sounds.playBleChirp();
     try {
       const res = await fetch(`${apiUrl}/mesh/gossip`, { method: "POST" });
       if (res.ok) {
         const data = await res.json();
         addLog(
-          `🔄 Gossip Round complete: ${data.transfers} packet transfer(s) across Bluetooth mesh. Distribution: ${JSON.stringify(data.deviceCounts)}`,
+          `🔄 BLE Gossip Round: ${data.transfers} packet transfer(s) across peer devices. State: ${JSON.stringify(data.deviceCounts)}`,
           "gossip"
         );
         refreshData();
       } else {
+        sounds.playAlert();
         addLog(`Gossip round failed with status ${res.status}`, "error");
       }
     } catch (err: unknown) {
+      sounds.playAlert();
       addLog(`Error running gossip: ${err instanceof Error ? err.message : String(err)}`, "error");
     } finally {
       setIsGossiping(false);
@@ -249,8 +259,6 @@ export default function Home() {
         );
 
         let settledCount = 0;
-        let dupCount = 0;
-
         interface BridgeResult {
           bridgeNode: string;
           packetId: string;
@@ -267,9 +275,8 @@ export default function Home() {
               "success"
             );
           } else if (r.outcome === "DUPLICATE_DROPPED") {
-            dupCount++;
             addLog(
-              `⚡ DUPLICATE DROPPED: Bridge ${r.bridgeNode} packet [${r.packetId}] rejected by atomic idempotency cache (Zero duplicate settlement!)`,
+              `⚡ DUPLICATE DROPPED: Bridge ${r.bridgeNode} packet [${r.packetId}] dropped by atomic idempotency cache (Zero duplicate debit!)`,
               "warning"
             );
           } else {
@@ -281,18 +288,21 @@ export default function Home() {
         });
 
         if (settledCount > 0) {
+          sounds.playSettlement();
           confetti({
-            particleCount: 60,
-            spread: 70,
+            particleCount: 80,
+            spread: 80,
             origin: { y: 0.6 },
           });
         }
 
         refreshData();
       } else {
+        sounds.playAlert();
         addLog(`Flush failed with status ${res.status}`, "error");
       }
     } catch (err: unknown) {
+      sounds.playAlert();
       addLog(`Error flushing bridges: ${err instanceof Error ? err.message : String(err)}`, "error");
     } finally {
       setIsFlushing(false);
@@ -302,6 +312,7 @@ export default function Home() {
   // 4. Reset mesh
   const handleReset = async () => {
     setIsResetting(true);
+    sounds.playClick();
     try {
       const res = await fetch(`${apiUrl}/mesh/reset`, { method: "POST" });
       if (res.ok) {
@@ -316,8 +327,26 @@ export default function Home() {
     }
   };
 
+  // Sound toggle
+  const toggleSound = () => {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    sounds.enabled = next;
+    if (next) sounds.playClick();
+  };
+
+  // Telemetry aggregates
+  const totalVolume = transactions
+    .filter((t) => t.status === "SETTLED")
+    .reduce((acc, curr) => acc + Number(curr.amount), 0);
+
+  const totalPacketsInMesh = devices.reduce(
+    (acc, d) => acc + (d.packetCount || 0),
+    0
+  );
+
   return (
-    <div className="min-h-screen text-slate-100 flex flex-col">
+    <div className="min-h-screen text-slate-100 flex flex-col selection:bg-indigo-500 selection:text-white">
       {/* Header */}
       <header className="border-b border-slate-800/80 glass-panel sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -332,17 +361,30 @@ export default function Home() {
                 <h1 className="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
                   UPI Offline Mesh
                 </h1>
-                <span className="text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                  Zero-Internet Payment Mesh
+                <span className="text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hidden sm:inline">
+                  Decentralized Offline Payments
                 </span>
               </div>
-              <p className="text-xs text-slate-400 hidden sm:block">
-                Hybrid RSA-OAEP + AES-GCM Encrypted Gossip with Atomic Idempotency Settlement
+              <p className="text-xs text-slate-400 hidden md:block">
+                Hybrid RSA-OAEP + AES-GCM Gossip Protocol with Atomic Idempotency Settlement
               </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-3 text-xs">
+          <div className="flex items-center space-x-2 sm:space-x-3 text-xs">
+            {/* Sound Toggle */}
+            <button
+              onClick={toggleSound}
+              className="p-2 rounded-lg glass-card text-slate-400 hover:text-white transition cursor-pointer"
+              title={soundEnabled ? "Mute Sound Effects" : "Enable Sound Effects"}
+            >
+              {soundEnabled ? (
+                <Volume2 className="w-4 h-4 text-emerald-400" />
+              ) : (
+                <VolumeX className="w-4 h-4 text-slate-500" />
+              )}
+            </button>
+
             {/* Backend connection pill */}
             <div
               className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full border ${
@@ -356,18 +398,21 @@ export default function Home() {
                   backendOnline ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
                 }`}
               />
-              <span className="font-medium">
-                {backendOnline ? "Core Backend Online" : "Backend Disconnected"}
+              <span className="font-medium text-[11px]">
+                {backendOnline ? "Core Backend Online" : "Connecting..."}
               </span>
             </div>
 
             {/* Cryptography Inspector Button */}
             <button
-              onClick={() => setShowCryptoModal(true)}
-              className="flex items-center space-x-1 px-3 py-1.5 rounded-lg glass-card text-slate-300 hover:text-white hover:border-indigo-500/40 transition"
+              onClick={() => {
+                sounds.playClick();
+                setShowCryptoModal(true);
+              }}
+              className="flex items-center space-x-1 px-3 py-1.5 rounded-lg glass-card text-slate-300 hover:text-white hover:border-indigo-500/40 transition cursor-pointer"
             >
               <Lock className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="hidden md:inline font-medium">Crypto Specs</span>
+              <span className="hidden sm:inline font-medium text-[11px]">Crypto Specs</span>
             </button>
           </div>
         </div>
@@ -375,369 +420,224 @@ export default function Home() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Architecture Pipeline Stepper */}
-        <section className="glass-panel rounded-2xl p-5 border border-slate-800 shadow-xl relative overflow-hidden">
-          <div className="absolute -right-20 -top-20 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center space-x-3">
-              <span className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                <Zap className="w-5 h-5" />
-              </span>
-              <div>
-                <h2 className="font-semibold text-sm text-slate-200">
-                  Decentralized Mesh-Routed Payment Pipeline
-                </h2>
-                <p className="text-xs text-slate-400">
-                  How a payment moves from a disconnected phone in a basement to settled bank credit:
-                </p>
-              </div>
+        {/* Live Banking Telemetry HUD */}
+        <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="glass-card rounded-2xl p-4 border border-slate-800 flex items-center space-x-3.5">
+            <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <IndianRupee className="w-5 h-5" />
             </div>
+            <div>
+              <span className="text-[11px] text-slate-400 font-medium">Total Volume Settled</span>
+              <p className="text-xl font-bold font-mono text-emerald-400">
+                ₹{totalVolume.toFixed(2)}
+              </p>
+            </div>
+          </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
-              <div className="flex items-center space-x-2 bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
-                <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 font-bold flex items-center justify-center text-[10px]">
-                  1
-                </span>
-                <span className="text-slate-300">Offline Encrypt</span>
-              </div>
-              <div className="flex items-center space-x-2 bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
-                <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 font-bold flex items-center justify-center text-[10px]">
-                  2
-                </span>
-                <span className="text-slate-300">BLE Gossip Hops</span>
-              </div>
-              <div className="flex items-center space-x-2 bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
-                <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center text-[10px]">
-                  3
-                </span>
-                <span className="text-slate-300">Bridge 4G Upload</span>
-              </div>
-              <div className="flex items-center space-x-2 bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
-                <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center text-[10px]">
-                  4
-                </span>
-                <span className="text-slate-300">Atomic Settle</span>
-              </div>
+          <div className="glass-card rounded-2xl p-4 border border-slate-800 flex items-center space-x-3.5">
+            <div className="p-3 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              <Radio className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[11px] text-slate-400 font-medium">Packets In Mesh</span>
+              <p className="text-xl font-bold font-mono text-indigo-400">
+                {totalPacketsInMesh}
+              </p>
+            </div>
+          </div>
+
+          <div className="glass-card rounded-2xl p-4 border border-slate-800 flex items-center space-x-3.5">
+            <div className="p-3 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[11px] text-slate-400 font-medium">Idempotency Hashes</span>
+              <p className="text-xl font-bold font-mono text-sky-400">
+                {idempotencyCacheSize}
+              </p>
+            </div>
+          </div>
+
+          <div className="glass-card rounded-2xl p-4 border border-slate-800 flex items-center space-x-3.5">
+            <div className="p-3 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
+              <Lock className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[11px] text-slate-400 font-medium">Crypto Integrity</span>
+              <p className="text-xl font-bold font-mono text-purple-300">
+                100% GCM
+              </p>
             </div>
           </div>
         </section>
 
-        {/* Mesh Device Topology Grid */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Smartphone className="w-5 h-5 text-indigo-400" />
-              <h2 className="text-base font-semibold text-slate-200">Virtual Bluetooth Mesh Devices</h2>
-              <span className="text-xs text-slate-500 font-mono">({devices.length} Nodes in Field)</span>
-            </div>
-            <div className="text-xs text-slate-400 flex items-center space-x-3">
-              <span className="flex items-center space-x-1">
-                <span className="w-2 h-2 rounded-full bg-slate-600" />
-                <span>Offline Relay</span>
-              </span>
-              <span className="flex items-center space-x-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>4G Internet Bridge</span>
-              </span>
-            </div>
-          </div>
+        {/* Mode Switcher Tabs */}
+        <div className="flex items-center space-x-3 border-b border-slate-800 pb-3">
+          <button
+            onClick={() => {
+              sounds.playClick();
+              setActiveTab("simulation");
+            }}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
+              activeTab === "simulation"
+                ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/25"
+                : "text-slate-400 hover:text-white glass-card"
+            }`}
+          >
+            <Activity className="w-4 h-4" />
+            <span>Interactive Mesh Simulation</span>
+          </button>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            {devices.map((d) => {
-              const isBridge = d.hasInternet;
-              const hasPackets = d.packetCount > 0;
-              return (
-                <div
-                  key={d.deviceId}
-                  className={`glass-card rounded-xl p-4 transition-all duration-300 relative group overflow-hidden border ${
-                    isBridge
-                      ? "border-emerald-500/30 bg-emerald-950/10 hover:border-emerald-500/60"
-                      : "border-slate-800 hover:border-slate-700"
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
+          <button
+            onClick={() => {
+              sounds.playClick();
+              setActiveTab("attack");
+            }}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
+              activeTab === "attack"
+                ? "bg-rose-600 text-white shadow-lg shadow-rose-500/25"
+                : "text-slate-400 hover:text-rose-300 glass-card"
+            }`}
+          >
+            <Skull className="w-4 h-4 text-rose-400" />
+            <span>Hacker Mode (Security Attack Studio)</span>
+          </button>
+        </div>
+
+        {activeTab === "simulation" ? (
+          <>
+            {/* Interactive 2D Mesh Topology Canvas */}
+            <MeshTopologyCanvas
+              devices={devices}
+              isGossiping={isGossiping}
+              onSelectDevice={(id) => setStartDevice(id)}
+            />
+
+            {/* Split Screen: Sender Mobile Mockup & Mesh Controls */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              {/* Left Column: Realistic Smartphone Simulator */}
+              <div className="lg:col-span-5 flex justify-center">
+                <MobileDeviceMockup
+                  senderVpa={senderVpa}
+                  setSenderVpa={setSenderVpa}
+                  receiverVpa={receiverVpa}
+                  setReceiverVpa={setReceiverVpa}
+                  amount={amount}
+                  setAmount={setAmount}
+                  pin={pin}
+                  setPin={setPin}
+                  onInject={handleInject}
+                  isInjecting={isInjecting}
+                  lastCiphertextPreview={lastCiphertextPreview}
+                />
+              </div>
+
+              {/* Right Column: Step Controls & Cryptography Inspection */}
+              <div className="lg:col-span-7 space-y-6">
+                {/* Protocol Execution Controls */}
+                <div className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-5">
+                  <div className="flex items-center justify-between">
                     <div>
-                      <div className="font-semibold text-sm tracking-tight text-white flex items-center space-x-1.5">
-                        <span>{d.deviceId}</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        {isBridge ? "Bridge Gateway" : "Offline Phone"}
+                      <h3 className="font-semibold text-sm text-slate-100">
+                        Protocol Execution Engine
+                      </h3>
+                      <p className="text-xs text-slate-400">
+                        Drive the decentralized gossip rounds and bridge uploads
                       </p>
                     </div>
 
-                    <div
-                      className={`p-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1 ${
-                        isBridge
-                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                          : "bg-slate-800 text-slate-400 border border-slate-700"
-                      }`}
-                      title={isBridge ? "Connected to Cellular 4G" : "No Internet Connection"}
-                    >
-                      {isBridge ? (
-                        <>
-                          <Wifi className="w-3.5 h-3.5" />
-                          <span className="text-[10px]">4G</span>
-                        </>
-                      ) : (
-                        <>
-                          <WifiOff className="w-3.5 h-3.5" />
-                          <span className="text-[10px]">OFFLINE</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Packet Buffer Section */}
-                  <div className="mt-4 pt-3 border-t border-slate-800/80">
-                    <div className="flex items-center justify-between text-xs mb-2">
-                      <span className="text-slate-400">Packet Buffer:</span>
-                      <span
-                        className={`font-mono font-bold px-2 py-0.5 rounded-full text-[11px] ${
-                          hasPackets
-                            ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 animate-pulse"
-                            : "bg-slate-800/50 text-slate-500"
-                        }`}
-                      >
-                        {d.packetCount} {d.packetCount === 1 ? "packet" : "packets"}
-                      </span>
-                    </div>
-
-                    {d.packetIds && d.packetIds.length > 0 ? (
-                      <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
-                        {d.packetIds.map((pid, idx) => (
-                          <span
-                            key={idx}
-                            className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-indigo-300 border border-indigo-500/20"
-                          >
-                            #{pid}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-slate-600 italic">No packets held</p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Interactive Simulation Controls */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Step 1: Payment Composer */}
-          <section className="lg:col-span-5 glass-panel rounded-2xl p-6 border border-slate-800 space-y-5">
-            <div className="flex items-center space-x-2">
-              <span className="w-6 h-6 rounded-full bg-indigo-500 text-white font-bold text-xs flex items-center justify-center shadow">
-                1
-              </span>
-              <div>
-                <h3 className="font-semibold text-sm text-slate-100">Step 1: Compose Offline Payment</h3>
-                <p className="text-xs text-slate-400">
-                  Simulate sender phone encrypting with Server RSA public key
-                </p>
-              </div>
-            </div>
-
-            <form onSubmit={handleInject} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 font-medium mb-1">Sender VPA</label>
-                  <select
-                    value={senderVpa}
-                    onChange={(e) => setSenderVpa(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500"
-                  >
-                    <option value="alice@demo">alice@demo (Alice)</option>
-                    <option value="bob@demo">bob@demo (Bob)</option>
-                    <option value="carol@demo">carol@demo (Carol)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-400 font-medium mb-1">Receiver VPA</label>
-                  <select
-                    value={receiverVpa}
-                    onChange={(e) => setReceiverVpa(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500"
-                  >
-                    <option value="bob@demo">bob@demo (Bob)</option>
-                    <option value="carol@demo">carol@demo (Carol)</option>
-                    <option value="alice@demo">alice@demo (Alice)</option>
-                    <option value="dave@demo">dave@demo (Dave)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-slate-400 font-medium mb-1">Amount (₹)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    step="any"
-                    value={amount}
-                    onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-400 font-medium mb-1">UPI PIN</label>
-                  <input
-                    type="password"
-                    maxLength={4}
-                    value={pin}
-                    onChange={(e) => setPin(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 font-mono tracking-widest focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-400 font-medium mb-1">Mesh TTL</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={ttl}
-                    onChange={(e) => setTtl(parseInt(e.target.value) || 5)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-medium mb-1">Inject At Virtual Phone</label>
-                <select
-                  value={startDevice}
-                  onChange={(e) => setStartDevice(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500"
-                >
-                  {devices.map((d) => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.deviceId} {d.hasInternet ? "(Bridge)" : "(Offline)"}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isInjecting || !backendOnline}
-                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-medium flex items-center justify-center space-x-2 shadow-lg shadow-indigo-500/20 disabled:opacity-50 transition cursor-pointer"
-              >
-                {isInjecting ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
-                <span>Encrypt & Inject Packet into Mesh</span>
-              </button>
-            </form>
-
-            {lastCiphertextPreview && (
-              <div className="p-3 bg-slate-900/80 rounded-xl border border-indigo-500/20 text-xs font-mono space-y-1">
-                <div className="flex items-center justify-between text-indigo-400 text-[11px] font-sans font-semibold">
-                  <span className="flex items-center space-x-1">
-                    <Lock className="w-3 h-3" />
-                    <span>RSA-OAEP + AES-GCM Ciphertext</span>
-                  </span>
-                  <span className="text-[10px] text-slate-500">Encrypted Payload</span>
-                </div>
-                <p className="text-slate-400 text-[10px] break-all leading-tight">
-                  {lastCiphertextPreview}
-                </p>
-              </div>
-            )}
-          </section>
-
-          {/* Steps 2 & 3: Mesh Actions */}
-          <section className="lg:col-span-7 glass-panel rounded-2xl p-6 border border-slate-800 flex flex-col justify-between space-y-6">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <span className="w-6 h-6 rounded-full bg-emerald-500 text-white font-bold text-xs flex items-center justify-center shadow">
-                    2 & 3
-                  </span>
-                  <div>
-                    <h3 className="font-semibold text-sm text-slate-100">
-                      Gossip & Bridge Ingestion Controls
-                    </h3>
-                    <p className="text-xs text-slate-400">
-                      Propagate packets device-to-device and trigger duplicate-storm ingestion
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <span className="text-xs text-slate-400">Idempotency Cache:</span>{" "}
-                  <span className="font-mono text-xs font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
-                    {idempotencyCacheSize} hashes
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                {/* Gossip Card */}
-                <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-3">
-                  <div className="flex items-center space-x-2">
-                    <RefreshCw className="w-4 h-4 text-sky-400" />
-                    <span className="font-semibold text-xs text-slate-200">Step 2: BLE Mesh Gossip</span>
-                  </div>
-                  <p className="text-xs text-slate-400">
-                    Phones broadcast held packets to nearby peers. TTL decrements per hop.
-                  </p>
-                  <button
-                    onClick={handleGossip}
-                    disabled={isGossiping || !backendOnline}
-                    className="w-full py-2 px-3 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 font-medium text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isGossiping ? "animate-spin" : ""}`} />
-                    <span>Run 1 Gossip Round</span>
-                  </button>
-                </div>
-
-                {/* Flush Bridges Card */}
-                <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-3">
-                  <div className="flex items-center space-x-2">
-                    <UploadCloud className="w-4 h-4 text-emerald-400" />
-                    <span className="font-semibold text-xs text-slate-200">
-                      Step 3: Bridges Upload (Parallel)
+                    <span className="text-[11px] font-mono text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-full border border-indigo-500/20">
+                      Step-by-Step Flow
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400">
-                    Bridge phone gets 4G signal and POSTs packets concurrently. Exercises idempotency!
-                  </p>
-                  <button
-                    onClick={handleFlush}
-                    disabled={isFlushing || !backendOnline}
-                    className="w-full py-2 px-3 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 font-medium text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer disabled:opacity-50"
-                  >
-                    <UploadCloud className={`w-3.5 h-3.5 ${isFlushing ? "animate-bounce" : ""}`} />
-                    <span>Flush Bridges to Backend</span>
-                  </button>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Gossip Step */}
+                    <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-3">
+                      <div className="flex items-center space-x-2">
+                        <RefreshCw className="w-4 h-4 text-sky-400" />
+                        <span className="font-semibold text-xs text-slate-200">
+                          Step 2: BLE Gossip Round
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        Each phone broadcasts held packets to nearby Bluetooth peers. Hop TTL decrements.
+                      </p>
+                      <button
+                        onClick={handleGossip}
+                        disabled={isGossiping || !backendOnline}
+                        className="w-full py-2.5 px-3 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 font-medium text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isGossiping ? "animate-spin" : ""}`} />
+                        <span>Run Gossip Hop</span>
+                      </button>
+                    </div>
+
+                    {/* Flush Step */}
+                    <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-3">
+                      <div className="flex items-center space-x-2">
+                        <UploadCloud className="w-4 h-4 text-emerald-400" />
+                        <span className="font-semibold text-xs text-slate-200">
+                          Step 3: Bridges Upload (Parallel)
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        Bridge phone walks outside, hits 4G, and POSTs packets concurrently.
+                      </p>
+                      <button
+                        onClick={handleFlush}
+                        disabled={isFlushing || !backendOnline}
+                        className="w-full py-2.5 px-3 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 font-medium text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer disabled:opacity-50"
+                      >
+                        <UploadCloud className={`w-3.5 h-3.5 ${isFlushing ? "animate-bounce" : ""}`} />
+                        <span>Flush Bridges to Core</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-xs">
+                    <span className="text-slate-500">Need a fresh slate?</span>
+                    <button
+                      onClick={handleReset}
+                      disabled={isResetting || !backendOnline}
+                      className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 flex items-center space-x-1 transition cursor-pointer disabled:opacity-50"
+                    >
+                      <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? "animate-spin" : ""}`} />
+                      <span>Reset Mesh Buffers & Cache</span>
+                    </button>
+                  </div>
                 </div>
+
+                {/* Live Ciphertext Inspector */}
+                {lastCiphertextPreview && (
+                  <div className="glass-panel rounded-2xl p-5 border border-indigo-500/30 space-y-2 font-mono text-xs">
+                    <div className="flex items-center justify-between text-indigo-400">
+                      <span className="flex items-center space-x-1.5 font-semibold">
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>Encrypted Packet Wire Payload</span>
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        RSA-OAEP Key Wrap + AES-256-GCM
+                      </span>
+                    </div>
+                    <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-900 text-slate-300 text-[11px] break-all leading-relaxed max-h-24 overflow-y-auto">
+                      {lastCiphertextPreview}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
+          </>
+        ) : (
+          /* Hacker Mode / Security Attack Studio */
+          <AttackStudio
+            apiUrl={apiUrl}
+            onLog={addLog}
+            onRefresh={refreshData}
+          />
+        )}
 
-            {/* Reset Footer */}
-            <div className="pt-4 border-t border-slate-800 flex items-center justify-between text-xs">
-              <span className="text-slate-500">
-                Want to test duplicate storm or fresh state?
-              </span>
-              <button
-                onClick={handleReset}
-                disabled={isResetting || !backendOnline}
-                className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 flex items-center space-x-1 transition cursor-pointer"
-              >
-                <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? "animate-spin" : ""}`} />
-                <span>Reset Mesh + Cache</span>
-              </button>
-            </div>
-          </section>
-        </div>
-
-        {/* Financial Overview: Account Balances & Transaction Ledger */}
+        {/* Live Financial Overview: Account Balances & Transaction Ledger */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Account Balances Table */}
           <section className="lg:col-span-4 glass-panel rounded-2xl p-6 border border-slate-800 space-y-4">
@@ -847,7 +747,7 @@ export default function Home() {
             </div>
             <button
               onClick={() => setLogs([])}
-              className="text-[11px] text-slate-500 hover:text-slate-300 transition"
+              className="text-[11px] text-slate-500 hover:text-slate-300 transition cursor-pointer"
             >
               Clear Logs
             </button>
@@ -898,7 +798,7 @@ export default function Home() {
               </div>
               <button
                 onClick={() => setShowCryptoModal(false)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white cursor-pointer"
               >
                 ✕
               </button>
@@ -911,13 +811,13 @@ export default function Home() {
                   <span>1. Hybrid RSA-OAEP + AES-256-GCM Encryption</span>
                 </span>
                 <p className="text-slate-400 leading-relaxed">
-                  The client generates a one-time AES-256 session key, encrypts the payment payload with authenticated <strong>AES-256-GCM</strong>, and wraps the AES key with the server's <strong>RSA-2048 (OAEP-SHA256)</strong> public key. Intermediaries cannot read or tamper with the payload. If any bit is altered, the GCM auth tag fails on decryption.
+                  The client generates a one-time AES-256 session key, encrypts the payment payload with authenticated <strong>AES-256-GCM</strong>, and wraps the AES key with the server&apos;s <strong>RSA-2048 (OAEP-SHA256)</strong> public key. Intermediaries cannot read or tamper with the payload. If any bit is altered, the GCM auth tag fails on decryption.
                 </p>
               </div>
 
               <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 space-y-1.5">
                 <span className="font-semibold text-amber-400 flex items-center space-x-1">
-                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <Zap className="w-3.5 h-3.5" />
                   <span>2. The Duplicate-Storm & Atomic Idempotency</span>
                 </span>
                 <p className="text-slate-400 leading-relaxed">
@@ -964,7 +864,7 @@ export default function Home() {
           <div className="flex items-center space-x-4">
             <span className="text-slate-600">|</span>
             <span>Spring Boot 3.3 Core</span>
-            <span>Next.js 14 Frontend</span>
+            <span>Next.js 16 Frontend</span>
             <span>FastAPI Edge Bridge</span>
           </div>
         </div>
