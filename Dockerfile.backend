@@ -1,0 +1,28 @@
+# Multi-stage Dockerfile for Spring Boot Core Settlement Backend
+# Build stage
+FROM maven:3.9.9-eclipse-temurin-17 AS builder
+WORKDIR /app
+
+# Copy pom and fetch dependencies
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
+
+# Copy source code and build jar
+COPY src ./src
+RUN mvn clean package -DskipTests
+
+# Runtime stage
+FROM eclipse-temurin:17-jre-jammy
+WORKDIR /app
+
+# Create non-root user for security
+RUN groupadd -r upi && useradd -r -g upi upi
+USER upi
+
+COPY --from=builder /app/target/upi-offline-mesh-0.0.1-SNAPSHOT.jar app.jar
+
+EXPOSE 8080
+ENV PORT=8080
+ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC"
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Dserver.port=${PORT:-8080} -jar app.jar"]
