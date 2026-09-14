@@ -21,6 +21,8 @@ import {
   Lock,
   Zap,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { sounds } from "./SoundEffects";
 
 export interface ChatMessage {
@@ -459,245 +461,167 @@ function FormattedMessageContent({
 }) {
   if (!content) return null;
 
-  // Split into lines while preserving code block integrity
-  const lines = content.split("\n");
-  const elements: React.ReactNode[] = [];
-  let inCodeBlock = false;
-  let codeLanguage = "";
-  let codeBuffer: string[] = [];
-  let codeBlockIndex = 0;
+  return (
+    <div className="text-xs leading-relaxed text-slate-100 space-y-2">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          table({ children }) {
+            return (
+              <div className="my-3 overflow-x-auto rounded-xl border border-slate-700 bg-slate-950/80 shadow-md">
+                <table className="min-w-full divide-y divide-slate-700 text-left text-xs">
+                  {children}
+                </table>
+              </div>
+            );
+          },
+          thead({ children }) {
+            return (
+              <thead className="bg-slate-900 text-indigo-300 font-semibold uppercase tracking-wider text-[10px]">
+                {children}
+              </thead>
+            );
+          },
+          tbody({ children }) {
+            return <tbody className="divide-y divide-slate-800">{children}</tbody>;
+          },
+          tr({ children }) {
+            return (
+              <tr className="hover:bg-slate-800/40 transition-colors odd:bg-slate-900/30 even:bg-slate-900/60">
+                {children}
+              </tr>
+            );
+          },
+          th({ children }) {
+            return (
+              <th className="px-3 py-2 text-indigo-300 font-bold border-b border-slate-700 whitespace-nowrap">
+                {children}
+              </th>
+            );
+          },
+          td({ children }) {
+            return (
+              <td className="px-3 py-2 text-slate-300 border-b border-slate-800/80 leading-normal">
+                {children}
+              </td>
+            );
+          },
+          code({ className, children, ...props }) {
+            const match = /language-(\w+)/.exec(className || "");
+            const codeString = String(children).replace(/\n$/, "");
+            const isInline = !className && !codeString.includes("\n");
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+            if (isInline) {
+              return (
+                <code
+                  className="px-1.5 py-0.5 mx-0.5 rounded bg-slate-900 border border-slate-700 font-mono text-[10px] text-amber-300 font-medium"
+                  {...props}
+                >
+                  {children}
+                </code>
+              );
+            }
 
-    // Detect code fence start / end
-    if (line.trim().startsWith("```")) {
-      if (inCodeBlock) {
-        // End of code block
-        const codeText = codeBuffer.join("\n");
-        const blockId = `code-${codeBlockIndex++}`;
-        elements.push(
-          <div
-            key={blockId}
-            className="my-2.5 rounded-xl overflow-hidden border border-slate-700 bg-slate-950 font-mono text-[11px]"
-          >
-            <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900 border-b border-slate-800 text-slate-400 text-[10px]">
-              <span className="uppercase font-semibold tracking-wider">
-                {codeLanguage || "code"}
-              </span>
-              <button
-                onClick={() => onCopyCode(codeText, blockId)}
-                className="flex items-center space-x-1 hover:text-white transition cursor-pointer text-[10px]"
+            const blockId = `code-${Math.random().toString(36).substring(2, 8)}`;
+            return (
+              <div className="my-2.5 rounded-xl overflow-hidden border border-slate-700 bg-slate-950 font-mono text-[11px] shadow-lg">
+                <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900 border-b border-slate-800 text-slate-400 text-[10px]">
+                  <span className="uppercase font-semibold tracking-wider text-indigo-400">
+                    {match ? match[1] : "code"}
+                  </span>
+                  <button
+                    onClick={() => onCopyCode(codeString, blockId)}
+                    className="flex items-center space-x-1 hover:text-white transition cursor-pointer text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded"
+                  >
+                    {copiedCodeId === blockId ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        <span className="text-emerald-400 font-medium">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3" />
+                        <span>Copy</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <pre className="p-3 overflow-x-auto text-emerald-300/90 whitespace-pre leading-relaxed">
+                  <code>{codeString}</code>
+                </pre>
+              </div>
+            );
+          },
+          h1({ children }) {
+            return (
+              <h2 className="text-base font-extrabold text-white mt-4 mb-2 pb-1 border-b border-slate-700">
+                {children}
+              </h2>
+            );
+          },
+          h2({ children }) {
+            return (
+              <h3 className="text-sm font-bold text-white mt-3.5 mb-1.5 pb-0.5 border-b border-slate-800">
+                {children}
+              </h3>
+            );
+          },
+          h3({ children }) {
+            return (
+              <h4 className="text-xs font-bold text-indigo-300 mt-3 mb-1 tracking-wide">
+                {children}
+              </h4>
+            );
+          },
+          ul({ children }) {
+            return (
+              <ul className="space-y-1 my-1.5 list-disc list-outside ml-4 text-slate-200">
+                {children}
+              </ul>
+            );
+          },
+          ol({ children }) {
+            return (
+              <ol className="space-y-1 my-1.5 list-decimal list-outside ml-4 text-slate-200 font-medium">
+                {children}
+              </ol>
+            );
+          },
+          li({ children }) {
+            return <li className="leading-relaxed pl-1">{children}</li>;
+          },
+          blockquote({ children }) {
+            return (
+              <blockquote className="my-2 pl-3 border-l-2 border-indigo-400 bg-indigo-950/30 py-1.5 rounded-r text-slate-300 italic text-[11px]">
+                {children}
+              </blockquote>
+            );
+          },
+          p({ children }) {
+            return <p className="leading-relaxed my-1.5">{children}</p>;
+          },
+          strong({ children }) {
+            return <strong className="font-bold text-white">{children}</strong>;
+          },
+          a({ href, children }) {
+            return (
+              <a
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2"
               >
-                {copiedCodeId === blockId ? (
-                  <>
-                    <Check className="w-3 h-3 text-emerald-400" />
-                    <span className="text-emerald-400 font-medium">Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3 h-3" />
-                    <span>Copy</span>
-                  </>
-                )}
-              </button>
-            </div>
-            <pre className="p-3 overflow-x-auto text-emerald-300/90 whitespace-pre leading-relaxed">
-              <code>{codeText}</code>
-            </pre>
-          </div>
-        );
-        inCodeBlock = false;
-        codeBuffer = [];
-        codeLanguage = "";
-      } else {
-        // Start of code block
-        inCodeBlock = true;
-        codeLanguage = line.trim().replace(/^```/, "").trim();
-        codeBuffer = [];
-      }
-      continue;
-    }
-
-    if (inCodeBlock) {
-      codeBuffer.push(line);
-      continue;
-    }
-
-    // Horizontal Rule
-    if (line.trim() === "---" || line.trim() === "***") {
-      elements.push(<hr key={`hr-${i}`} className="my-2.5 border-slate-700" />);
-      continue;
-    }
-
-    // Callout / Alert Box (> [!NOTE] or > [!IMPORTANT])
-    if (line.startsWith("> [!")) {
-      const alertType = line.match(/> \[!([A-Z]+)\]/)?.[1] || "NOTE";
-      elements.push(
-        <div
-          key={`alert-${i}`}
-          className="my-2 p-2.5 rounded-lg bg-indigo-950/40 border border-indigo-500/30 text-indigo-200 text-[11px] flex items-start space-x-2"
-        >
-          <HelpCircle className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
-          <span className="font-semibold text-indigo-300">{alertType}:</span>
-        </div>
-      );
-      continue;
-    }
-
-    // Blockquote
-    if (line.startsWith("> ")) {
-      elements.push(
-        <blockquote
-          key={`quote-${i}`}
-          className="my-1.5 pl-3 border-l-2 border-indigo-400 text-slate-300 italic text-[11px]"
-        >
-          {renderInlineFormatting(line.replace(/^>\s*/, ""))}
-        </blockquote>
-      );
-      continue;
-    }
-
-    // Headers
-    if (line.startsWith("### ")) {
-      elements.push(
-        <h4
-          key={`h3-${i}`}
-          className="text-xs font-bold text-indigo-300 mt-3 mb-1 tracking-wide flex items-center space-x-1.5"
-        >
-          <span>{renderInlineFormatting(line.replace(/^###\s+/, ""))}</span>
-        </h4>
-      );
-      continue;
-    }
-    if (line.startsWith("## ")) {
-      elements.push(
-        <h3
-          key={`h2-${i}`}
-          className="text-sm font-bold text-white mt-3.5 mb-1.5 border-b border-slate-700 pb-1"
-        >
-          {renderInlineFormatting(line.replace(/^##\s+/, ""))}
-        </h3>
-      );
-      continue;
-    }
-    if (line.startsWith("# ")) {
-      elements.push(
-        <h2
-          key={`h1-${i}`}
-          className="text-base font-extrabold text-white mt-4 mb-2"
-        >
-          {renderInlineFormatting(line.replace(/^#\s+/, ""))}
-        </h2>
-      );
-      continue;
-    }
-
-    // Unordered list item (- or *)
-    if (/^\s*[-*]\s+/.test(line)) {
-      const indent = line.search(/\S/);
-      const cleanLine = line.replace(/^\s*[-*]\s+/, "");
-      elements.push(
-        <div
-          key={`li-${i}`}
-          className="flex items-start space-x-2 my-1"
-          style={{ marginLeft: `${indent * 8}px` }}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0 mt-1.5" />
-          <span className="flex-1 leading-relaxed">
-            {renderInlineFormatting(cleanLine)}
-          </span>
-        </div>
-      );
-      continue;
-    }
-
-    // Numbered list item (1. )
-    const numMatch = line.match(/^\s*(\d+)\.\s+(.*)/);
-    if (numMatch) {
-      const num = numMatch[1];
-      const cleanLine = numMatch[2];
-      elements.push(
-        <div key={`num-${i}`} className="flex items-start space-x-2 my-1">
-          <span className="font-mono text-indigo-400 font-bold shrink-0 text-[10px] mt-0.5">
-            {num}.
-          </span>
-          <span className="flex-1 leading-relaxed">
-            {renderInlineFormatting(cleanLine)}
-          </span>
-        </div>
-      );
-      continue;
-    }
-
-    // Blank line
-    if (!line.trim()) {
-      elements.push(<div key={`blank-${i}`} className="h-1.5" />);
-      continue;
-    }
-
-    // Standard paragraph line
-    elements.push(
-      <p key={`p-${i}`} className="leading-relaxed my-0.5">
-        {renderInlineFormatting(line)}
-      </p>
-    );
-  }
-
-  // Handle open code block still streaming
-  if (inCodeBlock && codeBuffer.length > 0) {
-    elements.push(
-      <div
-        key="streaming-code"
-        className="my-2.5 rounded-xl overflow-hidden border border-slate-700 bg-slate-950 font-mono text-[11px]"
+                {children}
+              </a>
+            );
+          },
+          hr() {
+            return <hr className="my-3 border-slate-700" />;
+          },
+        }}
       >
-        <div className="px-3 py-1 bg-slate-900 border-b border-slate-800 text-slate-400 text-[10px]">
-          <span className="uppercase font-semibold tracking-wider">
-            {codeLanguage || "code"} (streaming...)
-          </span>
-        </div>
-        <pre className="p-3 overflow-x-auto text-emerald-300/90 whitespace-pre leading-relaxed">
-          <code>{codeBuffer.join("\n")}</code>
-        </pre>
-      </div>
-    );
-  }
-
-  return <div className="space-y-0.5">{elements}</div>;
-}
-
-/**
- * Format inline markdown: `code`, **bold**, *italic*
- */
-function renderInlineFormatting(text: string): React.ReactNode {
-  // Regex to split by inline code `...`, bold **...**, italic *...*
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g);
-
-  return parts.map((part, index) => {
-    if (part.startsWith("`") && part.endsWith("`") && part.length >= 2) {
-      return (
-        <code
-          key={index}
-          className="px-1.5 py-0.5 mx-0.5 rounded bg-slate-900 border border-slate-700/80 font-mono text-[10px] text-amber-300 font-medium"
-        >
-          {part.slice(1, -1)}
-        </code>
-      );
-    }
-    if (part.startsWith("**") && part.endsWith("**") && part.length >= 4) {
-      return (
-        <strong key={index} className="font-bold text-white">
-          {part.slice(2, -2)}
-        </strong>
-      );
-    }
-    if (part.startsWith("*") && part.endsWith("*") && part.length >= 2) {
-      return (
-        <em key={index} className="italic text-slate-200">
-          {part.slice(1, -1)}
-        </em>
-      );
-    }
-    return part;
-  });
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
 }

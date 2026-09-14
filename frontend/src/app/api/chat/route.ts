@@ -33,9 +33,10 @@ Your purpose is to explain, diagnose, and answer user questions regarding offlin
 
 ### RESPONSE GUIDELINES:
 - Output formatted, structured markdown line-by-line.
-- Use clear bullet points, bold key terms, and code or JSON schemas when helpful.
-- Keep explanations crisp, precise, technically accurate, and free of random generic filler.
-- If asked how to run or use the project, explain the UI controls (Inject Packet, BLE Gossip, Flush to Bridge, Attack Studio) or Docker commands.`;
+- Format tables using standard Markdown tables (| Col 1 | Col 2 |).
+- Provide complete, thorough explanations, pacing the response so that it concludes cleanly and never cuts off mid-sentence.
+- Use clean bullet points, step-by-step numbered lists, bold key terms, and code blocks with syntax identifiers.
+- Keep explanations crisp, authoritative, technically accurate, and focused on the UPI Offline Mesh architecture.`;
 
 export async function POST(req: NextRequest) {
   try {
@@ -49,14 +50,14 @@ export async function POST(req: NextRequest) {
     }
 
     const apiKey = process.env.GROQ_API_KEY?.trim();
-    let rawModel = process.env.GROQ_MODEL?.trim() || "openai/gpt-oss-20b";
+    let rawModel = process.env.GROQ_MODEL?.trim() || "openai/gpt-oss-120b";
 
     // Build ordered list of candidate models supported on Groq accounts
     const candidateModels = [
       rawModel,
+      "openai/gpt-oss-120b",
       "openai/gpt-oss-20b",
       "groq/compound-mini",
-      "openai/gpt-oss-120b",
       "llama-3.3-70b-versatile",
       "llama-3.1-8b-instant",
     ].filter((m, i, arr) => arr.indexOf(m) === i);
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest) {
           ],
           stream: true,
           temperature: 0.3,
-          max_tokens: 800,
+          max_tokens: 3500,
         });
         break; // Successfully started stream
       } catch (err: unknown) {
