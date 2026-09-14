@@ -49,7 +49,17 @@ export async function POST(req: NextRequest) {
     }
 
     const apiKey = process.env.GROQ_API_KEY?.trim();
-    const model = process.env.GROQ_MODEL?.trim() || "llama-3.3-70b-versatile";
+    let rawModel = process.env.GROQ_MODEL?.trim() || "openai/gpt-oss-20b";
+
+    // Build ordered list of candidate models supported on Groq accounts
+    const candidateModels = [
+      rawModel,
+      "openai/gpt-oss-20b",
+      "groq/compound-mini",
+      "openai/gpt-oss-120b",
+      "llama-3.3-70b-versatile",
+      "llama-3.1-8b-instant",
+    ].filter((m, i, arr) => arr.indexOf(m) === i);
 
     // If API key is missing or set to placeholder, stream a helpful setup guide with an offline technical answer
     if (!apiKey || apiKey === "your_groq_api_key_here") {
@@ -60,20 +70,35 @@ export async function POST(req: NextRequest) {
     // Initialize Groq client
     const groq = new Groq({ apiKey });
 
-    // Stream completions from Groq
-    const groqStream = await groq.chat.completions.create({
-      model,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        ...messages.map((m: { role: string; content: string }) => ({
-          role: m.role as "user" | "assistant" | "system",
-          content: m.content,
-        })),
-      ],
-      stream: true,
-      temperature: 0.3,
-      max_completion_tokens: 1500,
-    });
+    // Stream completions from Groq with resilient multi-model fallback
+    let groqStream = null;
+    let lastError = null;
+
+    for (const modelToTry of candidateModels) {
+      try {
+        groqStream = await groq.chat.completions.create({
+          model: modelToTry,
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            ...messages.map((m: { role: string; content: string }) => ({
+              role: m.role as "user" | "assistant" | "system",
+              content: m.content,
+            })),
+          ],
+          stream: true,
+          temperature: 0.3,
+          max_tokens: 800,
+        });
+        break; // Successfully started stream
+      } catch (err: unknown) {
+        lastError = err;
+        console.warn(`Groq model '${modelToTry}' unavailable, trying next candidate...`);
+      }
+    }
+
+    if (!groqStream) {
+      throw lastError || new Error("All candidate Groq models failed to respond.");
+    }
 
     // Create ReadableStream that pumps chunks line-by-line to the client
     const encoder = new TextEncoder();

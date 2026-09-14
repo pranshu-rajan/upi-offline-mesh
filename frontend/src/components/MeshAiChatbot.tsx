@@ -280,7 +280,7 @@ Try one of the quick prompts below or ask any question!`,
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-400">
-                  Llama 3.3 70B • Line-by-Line Formatted
+                  Groq LLM • Line-by-Line Streaming
                 </p>
               </div>
             </div>
