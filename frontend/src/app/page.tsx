@@ -22,6 +22,7 @@ import {
   Skull,
   Activity,
   Zap,
+  Settings,
 } from "lucide-react";
 import { sounds } from "@/components/SoundEffects";
 import MeshTopologyCanvas from "@/components/MeshTopologyCanvas";
@@ -67,16 +68,30 @@ interface LogEntry {
 }
 
 export default function Home() {
-  const [apiUrl, setApiUrl] = useState<string>(
-    process.env.NEXT_PUBLIC_API_URL || "/backend-api"
-  );
+  // Determine smart default API URL
+  const [apiUrl, setApiUrl] = useState<string>(() => {
+    if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+    if (typeof window !== "undefined" && window.location.hostname === "localhost") {
+      return "http://localhost:8080/api";
+    }
+    return "https://upi-offline-mesh-rrm4.onrender.com/api";
+  });
+
   const [backendOnline, setBackendOnline] = useState<boolean>(false);
+  const [isWakingUp, setIsWakingUp] = useState<boolean>(false);
   const [serverKey, setServerKey] = useState<ServerKeyInfo | null>(null);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<"simulation" | "attack">("simulation");
 
   // Core data states
-  const [devices, setDevices] = useState<Device[]>([]);
+  const [devices, setDevices] = useState<Device[]>([
+    { deviceId: "phone-alice", hasInternet: false, packetCount: 0, packetIds: [] },
+    { deviceId: "phone-bob", hasInternet: false, packetCount: 0, packetIds: [] },
+    { deviceId: "phone-stranger1", hasInternet: false, packetCount: 0, packetIds: [] },
+    { deviceId: "phone-stranger2", hasInternet: false, packetCount: 0, packetIds: [] },
+    { deviceId: "phone-stranger3", hasInternet: false, packetCount: 0, packetIds: [] },
+    { deviceId: "phone-bridge", hasInternet: true, packetCount: 0, packetIds: [] },
+  ]);
   const [idempotencyCacheSize, setIdempotencyCacheSize] = useState<number>(0);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -120,9 +135,10 @@ export default function Home() {
       const meshRes = await fetch(`${apiUrl}/mesh/state`, { cache: "no-store" });
       if (meshRes.ok) {
         const meshData = await meshRes.json();
-        setDevices(meshData.devices || []);
+        if (meshData.devices) setDevices(meshData.devices);
         setIdempotencyCacheSize(meshData.idempotencyCacheSize || 0);
         setBackendOnline(true);
+        setIsWakingUp(false);
       } else {
         setBackendOnline(false);
       }
@@ -142,32 +158,28 @@ export default function Home() {
       }
     } catch {
       setBackendOnline(false);
+      setIsWakingUp(true);
     }
   }, [apiUrl]);
 
   // Initial load
   useEffect(() => {
+    let isMounted = true;
     async function loadKey() {
       try {
         const res = await fetch(`${apiUrl}/server-key`);
         if (res.ok) {
           const keyData = await res.json();
-          setServerKey(keyData);
-          setBackendOnline(true);
+          if (isMounted) {
+            setServerKey(keyData);
+            setBackendOnline(true);
+            setIsWakingUp(false);
+          }
         }
       } catch {
-        if (apiUrl === "/backend-api") {
-          try {
-            const direct = await fetch("http://localhost:8080/api/server-key");
-            if (direct.ok) {
-              setApiUrl("http://localhost:8080/api");
-              const k = await direct.json();
-              setServerKey(k);
-              setBackendOnline(true);
-            }
-          } catch {
-            setBackendOnline(false);
-          }
+        if (isMounted) {
+          setIsWakingUp(true);
+          setBackendOnline(false);
         }
       }
     }
@@ -175,7 +187,10 @@ export default function Home() {
     loadKey();
     refreshData();
     const interval = setInterval(refreshData, 3000);
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [apiUrl, refreshData]);
 
   // 1. Inject payment into mesh
@@ -211,11 +226,11 @@ export default function Home() {
         refreshData();
       } else {
         sounds.playAlert();
-        addLog(`Injection failed with status ${res.status}`, "error");
+        addLog(`Injection failed (status ${res.status}). If Render was asleep, it is waking up now!`, "error");
       }
     } catch (err: unknown) {
       sounds.playAlert();
-      addLog(`Error injecting packet: ${err instanceof Error ? err.message : String(err)}`, "error");
+      addLog(`Connecting to backend... If Render backend is sleeping, it wakes up in ~30s. (${err instanceof Error ? err.message : String(err)})`, "warning");
     } finally {
       setIsInjecting(false);
     }
@@ -240,7 +255,7 @@ export default function Home() {
       }
     } catch (err: unknown) {
       sounds.playAlert();
-      addLog(`Error running gossip: ${err instanceof Error ? err.message : String(err)}`, "error");
+      addLog(`Connecting to backend... (${err instanceof Error ? err.message : String(err)})`, "warning");
     } finally {
       setIsGossiping(false);
     }
@@ -303,7 +318,7 @@ export default function Home() {
       }
     } catch (err: unknown) {
       sounds.playAlert();
-      addLog(`Error flushing bridges: ${err instanceof Error ? err.message : String(err)}`, "error");
+      addLog(`Connecting to backend... (${err instanceof Error ? err.message : String(err)})`, "warning");
     } finally {
       setIsFlushing(false);
     }
@@ -321,7 +336,7 @@ export default function Home() {
         refreshData();
       }
     } catch (err: unknown) {
-      addLog(`Error resetting mesh: ${err instanceof Error ? err.message : String(err)}`, "error");
+      addLog(`Reset signal sent. (${err instanceof Error ? err.message : String(err)})`, "warning");
     } finally {
       setIsResetting(false);
     }
@@ -387,19 +402,31 @@ export default function Home() {
 
             {/* Backend connection pill */}
             <div
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full border ${
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full border cursor-pointer ${
                 backendOnline
                   ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                  : "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                  : isWakingUp
+                  ? "bg-amber-500/10 border-amber-500/30 text-amber-300 animate-pulse"
+                  : "bg-slate-800 border-slate-700 text-slate-400"
               }`}
+              onClick={() => refreshData()}
+              title="Click to re-ping backend"
             >
               <div
                 className={`w-2 h-2 rounded-full ${
-                  backendOnline ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
+                  backendOnline
+                    ? "bg-emerald-400 animate-pulse"
+                    : isWakingUp
+                    ? "bg-amber-400 animate-ping"
+                    : "bg-slate-500"
                 }`}
               />
               <span className="font-medium text-[11px]">
-                {backendOnline ? "Core Backend Online" : "Connecting..."}
+                {backendOnline
+                  ? "Core Backend Online"
+                  : isWakingUp
+                  ? "Waking Render Backend..."
+                  : "Connecting..."}
               </span>
             </div>
 
@@ -420,6 +447,24 @@ export default function Home() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Waking up Render Banner */}
+        {isWakingUp && !backendOnline && (
+          <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-300 flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+              <span>
+                <strong>Render Free Tier Cold Start</strong>: The Spring Boot backend is waking up from sleep mode (~25–35 seconds). You can still click buttons below to send wake-up requests!
+              </span>
+            </div>
+            <button
+              onClick={() => refreshData()}
+              className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-semibold cursor-pointer"
+            >
+              Check Now
+            </button>
+          </div>
+        )}
+
         {/* Live Banking Telemetry HUD */}
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="glass-card rounded-2xl p-4 border border-slate-800 flex items-center space-x-3.5">
@@ -565,7 +610,7 @@ export default function Home() {
                       </p>
                       <button
                         onClick={handleGossip}
-                        disabled={isGossiping || !backendOnline}
+                        disabled={isGossiping}
                         className="w-full py-2.5 px-3 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 font-medium text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer disabled:opacity-50"
                       >
                         <RefreshCw className={`w-3.5 h-3.5 ${isGossiping ? "animate-spin" : ""}`} />
@@ -586,7 +631,7 @@ export default function Home() {
                       </p>
                       <button
                         onClick={handleFlush}
-                        disabled={isFlushing || !backendOnline}
+                        disabled={isFlushing}
                         className="w-full py-2.5 px-3 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 font-medium text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer disabled:opacity-50"
                       >
                         <UploadCloud className={`w-3.5 h-3.5 ${isFlushing ? "animate-bounce" : ""}`} />
@@ -599,7 +644,7 @@ export default function Home() {
                     <span className="text-slate-500">Need a fresh slate?</span>
                     <button
                       onClick={handleReset}
-                      disabled={isResetting || !backendOnline}
+                      disabled={isResetting}
                       className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 flex items-center space-x-1 transition cursor-pointer disabled:opacity-50"
                     >
                       <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? "animate-spin" : ""}`} />
@@ -805,6 +850,34 @@ export default function Home() {
             </div>
 
             <div className="space-y-4 text-xs text-slate-300">
+              {/* Backend Endpoint URL Configuration */}
+              <div className="p-3 bg-slate-900/90 rounded-xl border border-indigo-500/30 space-y-2">
+                <div className="flex items-center justify-between text-indigo-400 font-semibold">
+                  <span className="flex items-center space-x-1.5">
+                    <Settings className="w-4 h-4" />
+                    <span>Settlement Backend Endpoint</span>
+                  </span>
+                  <span className="text-[10px] text-slate-500">Live Config</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    value={apiUrl}
+                    onChange={(e) => setApiUrl(e.target.value)}
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 font-mono text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                  />
+                  <button
+                    onClick={() => {
+                      refreshData();
+                      sounds.playClick();
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition cursor-pointer"
+                  >
+                    Save & Test
+                  </button>
+                </div>
+              </div>
+
               <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 space-y-1.5">
                 <span className="font-semibold text-indigo-400 flex items-center space-x-1">
                   <Lock className="w-3.5 h-3.5" />
