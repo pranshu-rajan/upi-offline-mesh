@@ -23,11 +23,13 @@ import {
   Activity,
   Zap,
   Settings,
+  Bot,
 } from "lucide-react";
 import { sounds } from "@/components/SoundEffects";
 import MeshTopologyCanvas from "@/components/MeshTopologyCanvas";
 import MobileDeviceMockup from "@/components/MobileDeviceMockup";
 import AttackStudio from "@/components/AttackStudio";
+import MeshAiChatbot from "@/components/MeshAiChatbot";
 
 interface Device {
   deviceId: string;
@@ -82,6 +84,7 @@ export default function Home() {
   const [serverKey, setServerKey] = useState<ServerKeyInfo | null>(null);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<"simulation" | "attack">("simulation");
+  const [showAiChat, setShowAiChat] = useState<boolean>(false);
 
   // Core data states
   const [devices, setDevices] = useState<Device[]>([
@@ -440,6 +443,23 @@ export default function Home() {
             >
               <Lock className="w-3.5 h-3.5 text-indigo-400" />
               <span className="hidden sm:inline font-medium text-[11px]">Crypto Specs</span>
+            </button>
+
+            {/* AI Assistant Quick Toggle */}
+            <button
+              onClick={() => {
+                sounds.playClick();
+                setShowAiChat((prev) => !prev);
+              }}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border transition cursor-pointer ${
+                showAiChat
+                  ? "bg-indigo-600/30 border-indigo-500/60 text-indigo-300 shadow-sm shadow-indigo-500/30"
+                  : "glass-card text-slate-300 hover:text-white hover:border-indigo-500/40"
+              }`}
+            >
+              <Bot className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="font-medium text-[11px]">AI Assistant</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             </button>
           </div>
         </div>
@@ -942,6 +962,12 @@ export default function Home() {
           </div>
         </div>
       </footer>
+
+      {/* AI Assistant Chatbot Widget */}
+      <MeshAiChatbot
+        isOpen={showAiChat}
+        onToggle={() => setShowAiChat((prev) => !prev)}
+      />
     </div>
   );
 }
