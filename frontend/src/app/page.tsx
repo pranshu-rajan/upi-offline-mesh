@@ -24,12 +24,19 @@ import {
   Zap,
   Settings,
   Bot,
+  Database,
 } from "lucide-react";
 import { sounds } from "@/components/SoundEffects";
 import MeshTopologyCanvas from "@/components/MeshTopologyCanvas";
 import MobileDeviceMockup from "@/components/MobileDeviceMockup";
 import AttackStudio from "@/components/AttackStudio";
 import MeshAiChatbot from "@/components/MeshAiChatbot";
+import {
+  getSupabaseClient,
+  isSupabaseConfigured,
+  fetchSupabaseAccounts,
+  fetchSupabaseTransactions,
+} from "@/lib/supabaseClient";
 
 interface Device {
   deviceId: string;
@@ -85,6 +92,7 @@ export default function Home() {
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<"simulation" | "attack">("simulation");
   const [showAiChat, setShowAiChat] = useState<boolean>(false);
+  const [supabaseLive, setSupabaseLive] = useState<boolean>(false);
 
   // Core data states
   const [devices, setDevices] = useState<Device[]>([
@@ -131,7 +139,7 @@ export default function Home() {
     []
   );
 
-  // Fetch all backend data
+  // Fetch all backend data (with Supabase direct support and REST fallback)
   const refreshData = useCallback(async () => {
     try {
       // 1. Mesh State
@@ -146,18 +154,56 @@ export default function Home() {
         setBackendOnline(false);
       }
 
-      // 2. Accounts
-      const accRes = await fetch(`${apiUrl}/accounts`, { cache: "no-store" });
-      if (accRes.ok) {
-        const accData = await accRes.json();
-        setAccounts(accData || []);
+      // 2. Accounts (Try Supabase direct if configured, fallback to backend REST)
+      let accountsLoaded = false;
+      if (isSupabaseConfigured()) {
+        const sbAccounts = await fetchSupabaseAccounts();
+        if (sbAccounts && sbAccounts.length > 0) {
+          setAccounts(
+            sbAccounts.map((a) => ({
+              vpa: a.vpa,
+              holderName: a.holder_name,
+              balance: Number(a.balance),
+              version: a.version,
+            }))
+          );
+          accountsLoaded = true;
+        }
+      }
+      if (!accountsLoaded) {
+        const accRes = await fetch(`${apiUrl}/accounts`, { cache: "no-store" });
+        if (accRes.ok) {
+          const accData = await accRes.json();
+          setAccounts(accData || []);
+        }
       }
 
-      // 3. Transactions
-      const txRes = await fetch(`${apiUrl}/transactions`, { cache: "no-store" });
-      if (txRes.ok) {
-        const txData = await txRes.json();
-        setTransactions(txData || []);
+      // 3. Transactions (Try Supabase direct if configured, fallback to backend REST)
+      let txLoaded = false;
+      if (isSupabaseConfigured()) {
+        const sbTxs = await fetchSupabaseTransactions();
+        if (sbTxs && sbTxs.length > 0) {
+          setTransactions(
+            sbTxs.map((t) => ({
+              id: t.id,
+              senderVpa: t.sender_vpa,
+              receiverVpa: t.receiver_vpa,
+              amount: Number(t.amount),
+              status: t.status,
+              bridgeNodeId: t.bridge_node_id,
+              hopCount: t.hop_count,
+              settledAt: t.settled_at,
+            }))
+          );
+          txLoaded = true;
+        }
+      }
+      if (!txLoaded) {
+        const txRes = await fetch(`${apiUrl}/transactions`, { cache: "no-store" });
+        if (txRes.ok) {
+          const txData = await txRes.json();
+          setTransactions(txData || []);
+        }
       }
     } catch {
       setBackendOnline(false);
@@ -195,6 +241,45 @@ export default function Home() {
       clearInterval(interval);
     };
   }, [apiUrl, refreshData]);
+
+  // Supabase Realtime WebSocket subscription
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+
+    const sb = getSupabaseClient();
+    if (!sb) return;
+
+    const channel = sb
+      .channel("upi-mesh-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "transactions" },
+        (payload) => {
+          sounds.playSettlement();
+          addLog("⚡ [SUPABASE REALTIME] New transaction settled in PostgreSQL", "success");
+          refreshData();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "accounts" },
+        () => {
+          refreshData();
+        }
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          setSupabaseLive(true);
+          addLog("⚡ [SUPABASE REALTIME] Connected to live PostgreSQL publication channel", "success");
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          setSupabaseLive(false);
+        }
+      });
+
+    return () => {
+      sb.removeChannel(channel);
+    };
+  }, [addLog, refreshData]);
 
   // 1. Inject payment into mesh
   const handleInject = async () => {
@@ -430,6 +515,33 @@ export default function Home() {
                   : isWakingUp
                   ? "Waking Render Backend..."
                   : "Connecting..."}
+              </span>
+            </div>
+
+            {/* Supabase connection pill */}
+            <div
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full border ${
+                supabaseLive
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                  : isSupabaseConfigured()
+                  ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
+                  : "bg-slate-800/80 border-slate-700/80 text-slate-400"
+              }`}
+              title={
+                supabaseLive
+                  ? "Supabase PostgreSQL Realtime Connected"
+                  : isSupabaseConfigured()
+                  ? "Supabase Configured (Connecting Realtime...)"
+                  : "Supabase Ready (Configure NEXT_PUBLIC_SUPABASE_URL in Vercel to enable Direct Realtime)"
+              }
+            >
+              <Database className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="font-medium text-[11px]">
+                {supabaseLive
+                  ? "Supabase Realtime"
+                  : isSupabaseConfigured()
+                  ? "Supabase Connecting"
+                  : "Supabase Ready"}
               </span>
             </div>
 

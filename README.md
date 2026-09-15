@@ -1,6 +1,9 @@
 # 📡 UPI Offline Mesh — Full-Stack Production Showcase
 
-[![CI Pipeline](https://github.com/pranshu-rajan/upi-without-internet/actions/workflows/ci.yml/badge.svg)](https://github.com/pranshu-rajan/upi-without-internet/actions)
+[![CI Pipeline](https://github.com/pranshu-rajan/upi-offline-mesh/actions/workflows/ci.yml/badge.svg)](https://github.com/pranshu-rajan/upi-offline-mesh/actions)
+[![Vercel Live Demo](https://img.shields.io/badge/Vercel-Live%20Dashboard-000000?logo=vercel&logoColor=white)](https://upi-offline-rho.vercel.app)
+[![Render Backend API](https://img.shields.io/badge/Render-Live%20Backend-46E3B7?logo=render&logoColor=white)](https://upi-offline-mesh-rrm4.onrender.com/api/server-key)
+[![Supabase Database](https://img.shields.io/badge/Supabase-PostgreSQL%20%2B%20Realtime-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com)
 ![Java 17](https://img.shields.io/badge/Java-17-orange.svg)
 ![Spring Boot 3.3](https://img.shields.io/badge/Spring%20Boot-3.3.5-brightgreen.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-16%20App%20Router-black.svg)
@@ -12,7 +15,12 @@
 
 > **Decentralized offline UPI payments routed through a Bluetooth Mesh network.**
 >
-> You're in an underground basement with zero cellular connectivity. You send ₹500 to a friend. Your phone encrypts the transaction, broadcasts it over Bluetooth Mesh, and the packet hops device-to-device through stranger devices until *one* device walks outside, acquires 4G internet, and silently uploads the packet to the settlement backend. The backend cryptographically verifies, deduplicates against concurrent duplicate storms, and settles the ledger.
+> You're in an underground basement with zero cellular connectivity. You send ₹500 to a friend. Your phone encrypts the transaction, broadcasts it over Bluetooth Mesh, and the packet hops device-to-device through stranger devices until *one* device walks outside, acquires 4G internet, and silently uploads the packet to the settlement backend. The backend cryptographically verifies, deduplicates against concurrent duplicate storms, and settles the ledger into **Supabase PostgreSQL** with instant push updates to the web dashboard via **Supabase Realtime WebSockets**.
+
+### 🔗 Live Production Deployments
+- **Live Web Dashboard (Vercel)**: [https://upi-offline-rho.vercel.app](https://upi-offline-rho.vercel.app)
+- **Live Settlement Engine (Render)**: [https://upi-offline-mesh-rrm4.onrender.com](https://upi-offline-mesh-rrm4.onrender.com)
+- **Database Layer**: [Supabase PostgreSQL & Realtime](./supabase/README.md) (with automated zero-config H2 in-memory fallback for local dev & testing)
 
 ---
 
@@ -57,17 +65,27 @@ flowchart TD
         Freshness --> Settlement
     end
 
-    subgraph FrontendApp["💻 Full-Stack Web Dashboard (Next.js 14+ / TypeScript / Tailwind — Port 3000)"]
+    subgraph DatabaseLayer["🗄️ Database & Realtime Layer (Supabase / PostgreSQL)"]
+        SupabaseDB[("Supabase PostgreSQL DB\n• accounts (balances, version)\n• transactions (immutable ledger)\n• mesh_audit_logs")]
+        SupabaseRealtime["Supabase Realtime Engine\n(WebSockets Publication)"]
+        
+        Settlement -->|"JPA / Hibernate (HikariCP)"| SupabaseDB
+        SupabaseDB -->|"WAL CDC"| SupabaseRealtime
+    end
+
+    subgraph FrontendApp["💻 Full-Stack Web Dashboard (Next.js 16 / TypeScript / Tailwind — Vercel)"]
         Topology["Interactive Mesh Topology Canvas"]
         Studio["Offline Payment Studio"]
         StormSim["Duplicate-Storm Testbed"]
         LiveLedger["Live Financial Ledger & Balances"]
+        AiAssistant["Groq AI Technical Assistant"]
     end
 
     InternetCloud --> Ingest
     InternetCloud -.-> FastAPIGateway
     FastAPIGateway --> Ingest
-    FrontendApp <--> CoreBackend
+    FrontendApp <-->|"REST API"| CoreBackend
+    SupabaseRealtime -->|"Instant WebSocket Push"| FrontendApp
 ```
 
 ---
@@ -207,19 +225,41 @@ Response:
 
 ---
 
+## 🗄️ Full-Stack Supabase Database Setup
+
+The project natively integrates with **Supabase PostgreSQL** for persistent ledger storage and **Supabase Realtime** for sub-second push notifications to the dashboard:
+
+1. **Schema Initialization**:
+   - Run [`supabase/schema.sql`](./supabase/schema.sql) in your Supabase SQL Editor.
+   - Sets up `accounts` with optimistic locking, `transactions` with idempotency indexes, RLS policies, and Realtime publications.
+2. **Detailed Setup Guide**:
+   - See [`supabase/README.md`](./supabase/README.md) for full step-by-step instructions.
+
+---
+
 ## ☁️ Cloud Deployment Guide
 
-### Deploying Frontend to Vercel
+### 1. Deploying Frontend to Vercel
 1. Push this repository to GitHub.
 2. Import project in [Vercel](https://vercel.com) and set the **Root Directory** to `frontend`.
-3. Add Environment Variable:
-   - `NEXT_PUBLIC_API_URL`: Your deployed Spring Boot API URL (e.g. `https://upi-backend.railway.app/api`)
+3. Configure Environment Variables in Vercel:
+   - `NEXT_PUBLIC_API_URL`: `https://upi-offline-mesh-rrm4.onrender.com/api`
+   - `NEXT_PUBLIC_SUPABASE_URL`: `https://your-project-ref.supabase.co`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: `your_supabase_anon_public_key`
+   - `GROQ_API_KEY`: *(Optional)* Your Groq LLM API key for the live AI Technical Assistant
 4. Deploy!
 
-### Deploying Backend to Railway / Render
-1. Connect your GitHub repository.
-2. Set the build to use `Dockerfile.backend` or Dockerfile.
-3. Expose port `8080`.
+### 2. Deploying Backend to Render
+1. In [Render](https://render.com), create a new **Web Service** connected to your repository.
+2. Set runtime to **Docker** and specify `Dockerfile.backend` (or set Environment to Docker).
+3. Set environment variables in Render:
+   - `SERVER_PORT`: `8080`
+   - `SPRING_DATASOURCE_URL`: `jdbc:postgresql://db.your-project-ref.supabase.co:5432/postgres?sslmode=require`
+   - `SPRING_DATASOURCE_USERNAME`: `postgres`
+   - `SPRING_DATASOURCE_PASSWORD`: `<your-supabase-db-password>`
+   - `SPRING_JPA_HIBERNATE_DDL_AUTO`: `update`
+4. Expose port `8080`.
+*(Note: If no database credentials are supplied, the backend seamlessly falls back to H2 in-memory mode.)*
 
 ---
 
