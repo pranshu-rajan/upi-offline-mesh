@@ -1,7 +1,12 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+const rawSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+
+// Automatically sanitize URL to base origin (e.g. strips trailing slash or /rest/v1 if accidentally pasted)
+const supabaseUrl = rawSupabaseUrl
+  ? rawSupabaseUrl.replace(/\/rest\/v1\/?$/, "").replace(/\/+$/, "")
+  : undefined;
 
 let client: SupabaseClient | null = null;
 
