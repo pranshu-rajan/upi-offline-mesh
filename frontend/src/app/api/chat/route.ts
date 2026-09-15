@@ -205,16 +205,8 @@ The system enables secure digital payments in zero-connectivity environments:
   - **Attack Studio**: Test real-time defenses against Replays, Tampering, and TTL exhaustion.`;
   }
 
-  const setupNotice = `> [!NOTE]
-> **Groq API Key Setup**: To enable full, live AI generation from Groq LLM (\`llama-3.3-70b-versatile\`), paste your free Groq API key into \`.env\` or \`frontend/.env.local\` as \`GROQ_API_KEY=gsk_...\`.
-> *(Showing preview answer via streaming engine below)*
-
----
-
-`;
-
-  const fullText = setupNotice + answerContent;
-  const words = fullText.split(" ");
+    const fullText = answerContent;
+    const words = fullText.split(" ");
 
   const readable = new ReadableStream({
     async start(controller) {

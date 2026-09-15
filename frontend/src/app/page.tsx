@@ -24,7 +24,6 @@ import {
   Zap,
   Settings,
   Bot,
-  Database,
 } from "lucide-react";
 import { sounds } from "@/components/SoundEffects";
 import MeshTopologyCanvas from "@/components/MeshTopologyCanvas";
@@ -518,33 +517,6 @@ export default function Home() {
               </span>
             </div>
 
-            {/* Supabase connection pill */}
-            <div
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full border ${
-                supabaseLive
-                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                  : isSupabaseConfigured()
-                  ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
-                  : "bg-slate-800/80 border-slate-700/80 text-slate-400"
-              }`}
-              title={
-                supabaseLive
-                  ? "Supabase PostgreSQL Realtime Connected"
-                  : isSupabaseConfigured()
-                  ? "Supabase Configured (Connecting Realtime...)"
-                  : "Supabase Ready (Configure NEXT_PUBLIC_SUPABASE_URL in Vercel to enable Direct Realtime)"
-              }
-            >
-              <Database className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="font-medium text-[11px]">
-                {supabaseLive
-                  ? "Supabase Realtime"
-                  : isSupabaseConfigured()
-                  ? "Supabase Connecting"
-                  : "Supabase Ready"}
-              </span>
-            </div>
-
             {/* Cryptography Inspector Button */}
             <button
               onClick={() => {
@@ -570,7 +542,7 @@ export default function Home() {
               }`}
             >
               <Bot className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="font-medium text-[11px]">AI Assistant</span>
+              <span className="font-medium text-[11px]">AI Enabled</span>
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             </button>
           </div>

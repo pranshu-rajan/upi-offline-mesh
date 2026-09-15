@@ -252,7 +252,7 @@ Try one of the quick prompts below or ask any question!`,
           </div>
           <span className="font-semibold text-xs tracking-wide">Ask Mesh AI</span>
           <span className="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded-full bg-white/20 font-mono text-indigo-100">
-            Groq
+            AI Enabled
           </span>
         </button>
       )}
@@ -278,11 +278,11 @@ Try one of the quick prompts below or ask any question!`,
                     UPI Mesh AI Specialist
                   </h3>
                   <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                    Groq Streaming
+                    AI Enabled
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-400">
-                  Groq LLM • Line-by-Line Streaming
+                  Interactive Protocol Specialist • Streaming
                 </p>
               </div>
             </div>
@@ -437,7 +437,7 @@ Try one of the quick prompts below or ask any question!`,
 
             <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400">
               <span>Press <kbd className="px-1 py-0.5 rounded bg-slate-800 font-mono text-[9px]">Enter</kbd> to send</span>
-              <span className="font-mono text-emerald-400/80">Groq API Powered</span>
+              <span className="font-mono text-emerald-400/80">AI Enabled</span>
             </div>
           </div>
         </div>
