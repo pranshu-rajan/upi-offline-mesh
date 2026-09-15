@@ -1,55 +1,164 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* 
+ * Dual Theme System: 2026 Award-Winning Light Theme + DPI-Packet-Analyser Dark Theme
+ */
+
 :root {
-  --background: #090d16;
-  --foreground: #f1f5f9;
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card-bg: rgba(255, 255, 255, 0.92);
+  --card-border: rgba(226, 232, 240, 0.85);
+  --panel-bg: rgba(255, 255, 255, 0.86);
+  --panel-border: rgba(226, 232, 240, 0.9);
+  --panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.02), 0 8px 32px -4px rgba(15, 23, 42, 0.06);
+  --accent-primary: #4f46e5;
+  --accent-secondary: #0284c7;
+  --accent-emerald: #059669;
+}
+
+.dark, [data-theme="dark"] {
+  --background: #020617;
+  --foreground: #f8fafc;
+  --card-bg: rgba(15, 23, 42, 0.75);
+  --card-border: rgba(255, 255, 255, 0.08);
+  --panel-bg: rgba(15, 23, 42, 0.8);
+  --panel-border: rgba(255, 255, 255, 0.08);
+  --panel-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.6);
+  --accent-primary: #6366f1;
+  --accent-secondary: #38bdf8;
+  --accent-emerald: #10b981;
 }
 
 body {
-  background: radial-gradient(circle at 50% 0%, #171f33 0%, #090d16 65%);
-  color: #f1f5f9;
+  background-color: var(--background);
+  color: var(--foreground);
   min-height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   overflow-x: hidden;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
-/* Custom glowing & glass effects */
+/* Ambient Radial Illuminations */
+html:not(.dark) body {
+  background-image: 
+    radial-gradient(at 15% 10%, rgba(99, 102, 241, 0.06) 0px, transparent 40%),
+    radial-gradient(at 85% 15%, rgba(16, 185, 129, 0.05) 0px, transparent 45%),
+    radial-gradient(at 50% 90%, rgba(14, 165, 233, 0.04) 0px, transparent 50%),
+    radial-gradient(#e2e8f0 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 24px 24px;
+}
+
+html.dark body, [data-theme="dark"] body {
+  background-color: #020617;
+  background-image: 
+    radial-gradient(at 15% 10%, rgba(99, 102, 241, 0.12) 0px, transparent 40%),
+    radial-gradient(at 85% 15%, rgba(16, 185, 129, 0.1) 0px, transparent 45%),
+    radial-gradient(at 50% 90%, rgba(56, 189, 248, 0.08) 0px, transparent 50%),
+    radial-gradient(rgba(30, 41, 59, 0.6) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 24px 24px;
+}
+
+/* Frosted Glassmorphism Surfaces */
 .glass-panel {
-  background: rgba(15, 23, 42, 0.72);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--panel-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--panel-shadow);
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .glass-card {
-  background: rgba(30, 41, 59, 0.45);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--card-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02), 0 4px 16px -2px rgba(15, 23, 42, 0.04);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-card:hover {
-  border-color: rgba(99, 102, 241, 0.3);
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow: 0 4px 20px -2px rgba(99, 102, 241, 0.12);
 }
 
-/* Custom scrollbar */
+.dark .glass-card:hover {
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.25);
+}
+
+/* Blueprint / Cyber Radar Grid for Canvas & Charts */
+.mesh-canvas-bg {
+  background-color: #ffffff;
+  background-image: 
+    radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.03) 0%, transparent 70%),
+    radial-gradient(#cbd5e1 1.2px, transparent 1.2px);
+  background-size: 100% 100%, 20px 20px;
+}
+
+.dark .mesh-canvas-bg {
+  background-color: #030712;
+  background-image: 
+    radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 70%),
+    radial-gradient(rgba(51, 65, 85, 0.5) 1.2px, transparent 1.2px);
+  background-size: 100% 100%, 20px 20px;
+}
+
+/* Interactive Tactile Micro-Physics */
+.tactile-btn {
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease;
+}
+
+.tactile-btn:active {
+  transform: scale(0.97);
+}
+
+/* Theme Toggle Button */
+.theme-toggle-btn {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.theme-toggle-btn:hover {
+  transform: translateY(-1px);
+}
+
+/* Custom Refined Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
+  background: rgba(241, 245, 249, 0.7);
+}
+
+.dark ::-webkit-scrollbar-track {
   background: rgba(15, 23, 42, 0.6);
 }
+
 ::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.4);
-  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 6px;
 }
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.5);
+}
+
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.6);
+  background: rgba(100, 116, 139, 0.6);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.8);
 }
 
 @keyframes pulseSlow {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.7; transform: scale(0.98); }
+  50% { opacity: 0.8; transform: scale(0.985); }
 }
 
 .animate-pulse-slow {

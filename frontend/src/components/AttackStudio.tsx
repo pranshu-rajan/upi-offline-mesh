@@ -3,14 +3,14 @@
 import React, { useState } from "react";
 import {
   Skull,
-  ShieldAlert,
   Zap,
   Repeat,
   Bug,
-  CheckCircle2,
   XCircle,
   AlertOctagon,
   RefreshCw,
+  ShieldCheck,
+  Flame,
 } from "lucide-react";
 import { sounds } from "./SoundEffects";
 
@@ -18,9 +18,10 @@ interface AttackStudioProps {
   apiUrl: string;
   onLog: (msg: string, type?: "info" | "success" | "warning" | "error") => void;
   onRefresh: () => void;
+  theme?: "light" | "dark";
 }
 
-export default function AttackStudio({ apiUrl, onLog, onRefresh }: AttackStudioProps) {
+export default function AttackStudio({ apiUrl, onLog, onRefresh, theme = "light" }: AttackStudioProps) {
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [lastAttackResult, setLastAttackResult] = useState<{
     title: string;
@@ -29,8 +30,10 @@ export default function AttackStudio({ apiUrl, onLog, onRefresh }: AttackStudioP
   }>({
     title: "No attack simulated yet",
     status: "idle",
-    details: "Choose an adversarial attack vector below to test cryptographic guarantees.",
+    details: "Choose an adversarial attack vector below to stress-test cryptographic and idempotency guarantees.",
   });
+
+  const isDark = theme === "dark";
 
   // 1. Man-In-The-Middle Bit-Flip Tamper Attack
   const handleBitFlipAttack = async () => {
@@ -63,7 +66,7 @@ export default function AttackStudio({ apiUrl, onLog, onRefresh }: AttackStudioP
 
       // Forge a tampered packet with a flipped byte in the ciphertext
       const forgedPacket = {
-        packetId: "tampered-" + Math.random().toString(36).substring(2, 9),
+        packetId: `tampered-${packetId ? packetId.substring(0, 6) : "pkt"}-${Math.random().toString(36).substring(2, 7)}`,
         ttl: 4,
         createdAt: Date.now(),
         // Maliciously corrupted ciphertext
@@ -85,9 +88,9 @@ export default function AttackStudio({ apiUrl, onLog, onRefresh }: AttackStudioP
 
       if (result.outcome === "INVALID") {
         setLastAttackResult({
-          title: "MITM Attack Thwarted! (AES-GCM Auth Tag Failure)",
+          title: "MITM Attack Neutralized (AES-GCM Auth Tag Mismatch)",
           status: "blocked",
-          details: `The server caught the modified ciphertext before touching the ledger. Outcome: ${result.outcome} (${result.reason || "Decryption/Padding Error"}). Zero funds lost!`,
+          details: `The core server caught the tampered ciphertext before touching the ledger. Outcome: ${result.outcome} (${result.reason || "Decryption/Tag Error"}). Zero funds lost!`,
         });
         onLog("🛡️ [PROTECTION VERIFIED] Tampered ciphertext rejected by AES-256-GCM verification! Outcome: INVALID", "success");
       } else {
@@ -152,9 +155,9 @@ export default function AttackStudio({ apiUrl, onLog, onRefresh }: AttackStudioP
       const dropped = results.filter((r) => r.outcome === "DUPLICATE_DROPPED").length;
 
       setLastAttackResult({
-        title: "Duplicate-Storm Defended by Atomic Compare-And-Set",
+        title: "Duplicate-Storm Defended by Atomic Idempotency",
         status: "blocked",
-        details: `5 concurrent requests fired at the exact same millisecond: ${settled} settled, ${dropped} dropped via atomic idempotency. Sender debited exactly once!`,
+        details: `5 concurrent requests fired at the exact same millisecond: ${settled} settled, ${dropped} dropped via atomic putIfAbsent(SHA-256). Sender debited exactly once!`,
       });
       onLog(`🛡️ [IDEMPOTENCY VERIFIED] 5 concurrent bridge requests: ${settled} SETTLED, ${dropped} DUPLICATE_DROPPED`, "success");
       sounds.playSettlement();
@@ -193,9 +196,9 @@ export default function AttackStudio({ apiUrl, onLog, onRefresh }: AttackStudioP
 
       const result = await res.json();
       setLastAttackResult({
-        title: "Replay Attack Neutralized",
+        title: "Replay Attack Neutralized (Freshness Envelope)",
         status: "blocked",
-        details: `Packet rejected with ${result.outcome} (${result.reason || "Decryption / Freshness Check"}). Packets older than 24h are invalid!`,
+        details: `Packet rejected with ${result.outcome} (${result.reason || "Decryption / Freshness Check"}). Captured packets older than 24h are rejected before settlement!`,
       });
       onLog(`🛡️ [REPLAY ATTACK BLOCKED] Replayed packet rejected! Outcome: ${result.outcome}`, "success");
       onRefresh();
@@ -207,47 +210,82 @@ export default function AttackStudio({ apiUrl, onLog, onRefresh }: AttackStudioP
   };
 
   return (
-    <div className="glass-panel rounded-2xl p-6 border border-rose-500/20 space-y-5 relative overflow-hidden">
-      {/* Background ambient glow */}
-      <div className="absolute top-0 right-0 w-64 h-64 bg-rose-500/5 rounded-full blur-3xl pointer-events-none" />
+    <div className={`glass-panel rounded-3xl p-6 sm:p-8 border shadow-lg space-y-6 relative overflow-hidden transition-all duration-200 ${
+      isDark
+        ? "bg-slate-900/70 border-rose-900/30 text-slate-100"
+        : "bg-white/90 border-rose-200/90 text-slate-900 shadow-[0_4px_24px_-4px_rgba(244,63,94,0.08)]"
+    }`}>
+      {/* Ambient background accent */}
+      <div className={`absolute top-0 right-0 w-80 h-80 rounded-full blur-3xl pointer-events-none ${
+        isDark ? "bg-rose-500/10" : "bg-rose-500/5"
+      }`} />
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2.5">
-          <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+      <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10 border-b pb-5 ${
+        isDark ? "border-slate-800" : "border-rose-100"
+      }`}>
+        <div className="flex items-center space-x-3">
+          <div className={`p-2.5 rounded-2xl border shadow-sm ${
+            isDark
+              ? "bg-rose-950/60 text-rose-400 border-rose-900/80"
+              : "bg-rose-50 text-rose-600 border border-rose-200"
+          }`}>
             <Skull className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="font-bold text-sm text-slate-100 flex items-center space-x-2">
-              <span>Adversarial Security Testbed (Hacker Mode)</span>
-              <span className="text-[10px] bg-rose-500/20 text-rose-300 font-mono px-2 py-0.5 rounded-full border border-rose-500/30">
+            <div className="flex items-center space-x-2">
+              <h3 className="font-bold text-base tracking-tight">
+                Adversarial Security Testbed (Hacker Mode)
+              </h3>
+              <span className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full border ${
+                isDark
+                  ? "bg-rose-950/80 text-rose-300 border-rose-800"
+                  : "bg-rose-50 text-rose-700 border-rose-200"
+              }`}>
                 Live Attack Simulator
               </span>
-            </h3>
-            <p className="text-xs text-slate-400">
-              Actively execute network attacks to prove cryptographic resilience
+            </div>
+            <p className={`text-xs mt-0.5 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+              Execute live attack vectors against the settlement pipeline to mathematically prove cryptographic guarantees
             </p>
           </div>
+        </div>
+
+        <div className={`flex items-center space-x-2 text-xs font-semibold px-3 py-1.5 rounded-xl border ${
+          isDark
+            ? "bg-rose-950/40 text-rose-300 border-rose-900/60"
+            : "text-rose-700 bg-rose-50/80 border border-rose-200"
+        }`}>
+          <Flame className="w-4 h-4 text-rose-500" />
+          <span>Red-Team Penetration Suite</span>
         </div>
       </div>
 
       {/* Attack Vector Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {/* Attack 1: Bit-Flip */}
-        <div className="bg-slate-900/70 rounded-xl p-4 border border-slate-800 space-y-2.5 flex flex-col justify-between">
-          <div className="space-y-1">
-            <div className="flex items-center space-x-1.5 text-rose-400 font-semibold text-xs">
+        <div className={`glass-card rounded-2xl p-5 border space-y-3.5 flex flex-col justify-between transition-all ${
+          isDark
+            ? "bg-slate-950/60 border-slate-800 hover:border-rose-500/50"
+            : "bg-white border-slate-200/90 hover:border-rose-300 hover:shadow-md"
+        }`}>
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2 text-rose-500 font-bold text-xs">
               <Bug className="w-4 h-4" />
-              <span>1. Man-In-The-Middle Bit Flip</span>
+              <span>1. MITM Bit-Flip Tamper Attack</span>
             </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Tamper with 1 byte of the encrypted packet in transit. Proves AES-256-GCM auth tag verification.
+            <p className={`text-xs leading-relaxed ${isDark ? "text-slate-400" : "text-slate-600"}`}>
+              Flip 1 byte of the encrypted wire ciphertext in transit across stranger relay nodes. Proves <strong>AES-256-GCM authentication tag</strong> integrity verification.
             </p>
           </div>
           <button
             onClick={handleBitFlipAttack}
             disabled={isRunning}
-            className="w-full py-2 px-3 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 font-semibold text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer disabled:opacity-50"
+            className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 transition tactile-btn cursor-pointer disabled:opacity-50 shadow-sm border ${
+              isDark
+                ? "bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 border-rose-800/80"
+                : "bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200"
+            }`}
           >
             {isRunning ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Skull className="w-3.5 h-3.5" />}
             <span>Execute Bit-Flip Attack</span>
@@ -255,20 +293,28 @@ export default function AttackStudio({ apiUrl, onLog, onRefresh }: AttackStudioP
         </div>
 
         {/* Attack 2: Duplicate Storm */}
-        <div className="bg-slate-900/70 rounded-xl p-4 border border-slate-800 space-y-2.5 flex flex-col justify-between">
-          <div className="space-y-1">
-            <div className="flex items-center space-x-1.5 text-amber-400 font-semibold text-xs">
+        <div className={`glass-card rounded-2xl p-5 border space-y-3.5 flex flex-col justify-between transition-all ${
+          isDark
+            ? "bg-slate-950/60 border-slate-800 hover:border-amber-500/50"
+            : "bg-white border-slate-200/90 hover:border-amber-300 hover:shadow-md"
+        }`}>
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2 text-amber-500 font-bold text-xs">
               <Zap className="w-4 h-4" />
               <span>2. 5x Concurrent Duplicate Storm</span>
             </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Fire 5 simultaneous bridge uploads of the exact same ciphertext. Proves atomic idempotency (`putIfAbsent`).
+            <p className={`text-xs leading-relaxed ${isDark ? "text-slate-400" : "text-slate-600"}`}>
+              Fire 5 simultaneous bridge uploads of the exact same payment ciphertext. Proves atomic <code>putIfAbsent(SHA-256)</code> deduplication preventing double-debiting.
             </p>
           </div>
           <button
             onClick={handleDuplicateStormBurst}
             disabled={isRunning}
-            className="w-full py-2 px-3 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 font-semibold text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer disabled:opacity-50"
+            className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 transition tactile-btn cursor-pointer disabled:opacity-50 shadow-sm border ${
+              isDark
+                ? "bg-amber-950/40 hover:bg-amber-900/50 text-amber-300 border-amber-800/80"
+                : "bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200"
+            }`}
           >
             {isRunning ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
             <span>Fire 5x Duplicate Storm</span>
@@ -276,20 +322,28 @@ export default function AttackStudio({ apiUrl, onLog, onRefresh }: AttackStudioP
         </div>
 
         {/* Attack 3: Replay Attack */}
-        <div className="bg-slate-900/70 rounded-xl p-4 border border-slate-800 space-y-2.5 flex flex-col justify-between">
-          <div className="space-y-1">
-            <div className="flex items-center space-x-1.5 text-sky-400 font-semibold text-xs">
+        <div className={`glass-card rounded-2xl p-5 border space-y-3.5 flex flex-col justify-between transition-all ${
+          isDark
+            ? "bg-slate-950/60 border-slate-800 hover:border-sky-500/50"
+            : "bg-white border-slate-200/90 hover:border-sky-300 hover:shadow-md"
+        }`}>
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2 text-sky-400 font-bold text-xs">
               <Repeat className="w-4 h-4" />
               <span>3. Stale Replay Attack</span>
             </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Broadcast a captured packet from 48 hours ago. Proves the 24-hour timestamp freshness envelope.
+            <p className={`text-xs leading-relaxed ${isDark ? "text-slate-400" : "text-slate-600"}`}>
+              Broadcast an eavesdropped packet with an expired timestamp (48h old). Proves strict 24-hour freshness envelope rejection at the settlement engine.
             </p>
           </div>
           <button
             onClick={handleReplayAttack}
             disabled={isRunning}
-            className="w-full py-2 px-3 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 font-semibold text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer disabled:opacity-50"
+            className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 transition tactile-btn cursor-pointer disabled:opacity-50 shadow-sm border ${
+              isDark
+                ? "bg-sky-950/40 hover:bg-sky-900/50 text-sky-300 border-sky-800/80"
+                : "bg-sky-50 hover:bg-sky-100 text-sky-700 border-sky-200"
+            }`}
           >
             {isRunning ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Repeat className="w-3.5 h-3.5" />}
             <span>Replay Expired Packet</span>
@@ -299,28 +353,50 @@ export default function AttackStudio({ apiUrl, onLog, onRefresh }: AttackStudioP
 
       {/* Attack Result Display Box */}
       <div
-        className={`p-4 rounded-xl border flex items-start space-x-3 text-xs ${
+        className={`rounded-2xl p-5 border transition-all ${
           lastAttackResult.status === "blocked"
-            ? "bg-emerald-950/30 border-emerald-500/30 text-emerald-300"
+            ? isDark
+              ? "bg-emerald-950/40 border-emerald-800/80 text-emerald-300 shadow-sm"
+              : "bg-emerald-50/90 border-emerald-200/90 text-emerald-900 shadow-sm"
             : lastAttackResult.status === "breached"
-            ? "bg-rose-950/40 border-rose-500/40 text-rose-300"
-            : "bg-slate-900/50 border-slate-800 text-slate-400"
+            ? isDark
+              ? "bg-rose-950/40 border-rose-800 text-rose-300 shadow-sm"
+              : "bg-rose-50 border-rose-300 text-rose-900 shadow-sm"
+            : isDark
+            ? "bg-slate-950/60 border-slate-800 text-slate-400"
+            : "bg-slate-50 border-slate-200 text-slate-700"
         }`}
       >
-        <div className="mt-0.5">
+        <div className="flex items-start space-x-3">
           {lastAttackResult.status === "blocked" ? (
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <div className={`p-2 rounded-xl shrink-0 ${isDark ? "bg-emerald-900/50 text-emerald-400" : "bg-emerald-100 text-emerald-700"}`}>
+              <ShieldCheck className="w-5 h-5" />
+            </div>
           ) : lastAttackResult.status === "breached" ? (
-            <AlertOctagon className="w-4 h-4 text-rose-400" />
+            <div className={`p-2 rounded-xl shrink-0 ${isDark ? "bg-rose-900/50 text-rose-400" : "bg-rose-100 text-rose-700"}`}>
+              <XCircle className="w-5 h-5" />
+            </div>
           ) : (
-            <ShieldAlert className="w-4 h-4 text-slate-500" />
+            <div className={`p-2 rounded-xl shrink-0 ${isDark ? "bg-slate-800 text-slate-400" : "bg-slate-200 text-slate-600"}`}>
+              <AlertOctagon className="w-5 h-5" />
+            </div>
           )}
-        </div>
-        <div>
-          <span className="font-bold block text-slate-200">
-            {lastAttackResult.title}
-          </span>
-          <p className="mt-0.5 leading-relaxed">{lastAttackResult.details}</p>
+
+          <div className="space-y-1">
+            <h4 className="font-bold text-sm tracking-tight flex items-center space-x-2">
+              <span>{lastAttackResult.title}</span>
+              {lastAttackResult.status === "blocked" && (
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full font-mono ${
+                  isDark ? "bg-emerald-900/80 text-emerald-300 border border-emerald-700" : "bg-emerald-200/80 text-emerald-900"
+                }`}>
+                  SECURITY DEFENSE VERIFIED
+                </span>
+              )}
+            </h4>
+            <p className={`text-xs leading-relaxed font-medium ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+              {lastAttackResult.details}
+            </p>
+          </div>
         </div>
       </div>
     </div>

@@ -2,7 +2,6 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
-  MessageSquare,
   X,
   Send,
   Trash2,
@@ -11,11 +10,9 @@ import {
   User,
   Copy,
   Check,
-  ChevronDown,
   Maximize2,
   Minimize2,
   StopCircle,
-  HelpCircle,
   Shield,
   Radio,
   Lock,
@@ -55,14 +52,41 @@ const STARTER_PROMPTS = [
   },
 ];
 
+function getTimestamp(): string {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function generateMsgId(prefix: string): string {
+  return `${prefix}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+async function streamResponse(
+  body: ReadableStream<Uint8Array>,
+  onUpdate: (fullText: string) => void
+) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let fullText = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    fullText = fullText + chunk;
+    onUpdate(fullText);
+  }
+}
+
 export default function MeshAiChatbot({
   isOpen,
   onToggle,
+  theme = "light",
 }: {
   isOpen: boolean;
   onToggle: () => void;
+  theme?: "light" | "dark";
 }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([
+  const isDark = theme === "dark";
+  const [messages, setMessages] = useState<ChatMessage[]>(() => [
     {
       id: "welcome-1",
       role: "assistant",
@@ -71,7 +95,7 @@ export default function MeshAiChatbot({
 I can explain the cryptographic protocol, store-and-forward gossip mesh, anti-replay protections, or guide you through the Attack Studio.
 
 Try one of the quick prompts below or ask any question!`,
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      timestamp: getTimestamp(),
     },
   ]);
 
@@ -129,18 +153,18 @@ Try one of the quick prompts below or ask any question!`,
     sounds.playBleChirp();
 
     const userMessage: ChatMessage = {
-      id: `user-${Date.now()}`,
+      id: generateMsgId("user"),
       role: "user",
       content: query,
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      timestamp: getTimestamp(),
     };
 
-    const assistantPlaceholderId = `assistant-${Date.now()}`;
+    const assistantPlaceholderId = generateMsgId("assistant");
     const initialAssistantMessage: ChatMessage = {
       id: assistantPlaceholderId,
       role: "assistant",
       content: "",
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      timestamp: getTimestamp(),
     };
 
     setMessages((prev) => [...prev, userMessage, initialAssistantMessage]);
@@ -175,25 +199,15 @@ Try one of the quick prompts below or ask any question!`,
         throw new Error("No readable stream received from server");
       }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-      let accumulatedText = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        accumulatedText += chunk;
-
+      await streamResponse(res.body, (fullText) => {
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantPlaceholderId
-              ? { ...msg, content: accumulatedText }
+              ? { ...msg, content: fullText }
               : msg
           )
         );
-      }
+      });
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === "AbortError") {
         // User stopped generation manually
@@ -229,7 +243,7 @@ Try one of the quick prompts below or ask any question!`,
         id: "welcome-1",
         role: "assistant",
         content: `Conversation cleared. Ask me anything about the **UPI Offline Mesh** architecture!`,
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        timestamp: getTimestamp(),
       },
     ]);
   };
@@ -243,16 +257,16 @@ Try one of the quick prompts below or ask any question!`,
             sounds.playClick();
             onToggle();
           }}
-          className="fixed bottom-6 right-6 z-50 flex items-center space-x-2.5 px-4 py-3 rounded-full bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white shadow-2xl shadow-indigo-500/40 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer group border border-indigo-400/30"
+          className="fixed bottom-6 right-6 z-50 flex items-center space-x-2.5 px-4 py-3 rounded-full bg-gradient-to-r from-indigo-600 via-indigo-700 to-indigo-600 text-white shadow-xl shadow-indigo-500/25 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer group border border-indigo-400/40"
           aria-label="Open AI Assistant"
         >
           <div className="relative">
             <Bot className="w-5 h-5 text-white animate-bounce" />
-            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full ring-2 ring-slate-900 animate-pulse" />
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full ring-2 ring-white animate-pulse" />
           </div>
-          <span className="font-semibold text-xs tracking-wide">Ask Mesh AI</span>
-          <span className="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded-full bg-white/20 font-mono text-indigo-100">
-            AI Enabled
+          <span className="font-bold text-xs tracking-wide">Ask Mesh AI</span>
+          <span className="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded-full bg-white/20 font-mono text-white font-semibold">
+            Streaming
           </span>
         </button>
       )}
@@ -260,29 +274,43 @@ Try one of the quick prompts below or ask any question!`,
       {/* Slide-Over / Floating Modal Chat Window */}
       {isOpen && (
         <div
-          className={`fixed z-50 transition-all duration-300 flex flex-col bg-slate-900/95 backdrop-blur-xl border border-slate-700/80 shadow-2xl shadow-black/80 rounded-2xl overflow-hidden ${
+          className={`fixed z-50 transition-all duration-300 flex flex-col backdrop-blur-2xl border shadow-2xl rounded-3xl overflow-hidden ${
             isExpanded
               ? "inset-4 sm:inset-8"
               : "bottom-4 right-4 w-[94vw] sm:w-[460px] h-[640px] max-h-[88vh]"
+          } ${
+            isDark
+              ? "bg-slate-950/95 border-slate-800 text-slate-100"
+              : "bg-white/95 border-slate-200 text-slate-900"
           }`}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3.5 bg-slate-950/80 border-b border-slate-800">
+          <div className={`flex items-center justify-between px-4 py-3.5 border-b ${
+            isDark ? "bg-slate-900/90 border-slate-800" : "bg-slate-50/90 border-slate-200"
+          }`}>
             <div className="flex items-center space-x-2.5">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/30">
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm ${
+                isDark
+                  ? "bg-gradient-to-tr from-cyan-600 to-indigo-600"
+                  : "bg-gradient-to-tr from-indigo-600 to-indigo-700"
+              }`}>
                 <Bot className="w-4 h-4" />
               </div>
               <div>
                 <div className="flex items-center space-x-1.5">
-                  <h3 className="text-xs font-bold text-white tracking-wide">
+                  <h3 className={`text-xs font-bold tracking-tight ${isDark ? "text-white" : "text-slate-900"}`}>
                     UPI Mesh AI Specialist
                   </h3>
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                    AI Enabled
+                  <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-mono font-bold border ${
+                    isDark
+                      ? "bg-cyan-950/80 text-cyan-300 border-cyan-800"
+                      : "bg-emerald-100 text-emerald-800 border-emerald-200"
+                  }`}>
+                    Live Copilot
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400">
-                  Interactive Protocol Specialist • Streaming
+                <p className={`text-[10px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                  Protocol Verification & Architecture Guide
                 </p>
               </div>
             </div>
@@ -291,14 +319,18 @@ Try one of the quick prompts below or ask any question!`,
               <button
                 onClick={handleClearHistory}
                 title="Clear Chat History"
-                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                className={`p-1.5 rounded-lg transition cursor-pointer ${
+                  isDark ? "text-slate-400 hover:text-rose-400 hover:bg-slate-800" : "text-slate-400 hover:text-rose-600 hover:bg-slate-100"
+                }`}
               >
                 <Trash2 className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setIsExpanded(!isExpanded)}
                 title={isExpanded ? "Collapse Window" : "Expand Window"}
-                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer hidden sm:block"
+                className={`p-1.5 rounded-lg transition cursor-pointer hidden sm:block ${
+                  isDark ? "text-slate-400 hover:text-white hover:bg-slate-800" : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                }`}
               >
                 {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               </button>
@@ -308,7 +340,9 @@ Try one of the quick prompts below or ask any question!`,
                   onToggle();
                 }}
                 title="Close Assistant"
-                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                className={`p-1.5 rounded-lg transition cursor-pointer ${
+                  isDark ? "text-slate-400 hover:text-white hover:bg-slate-800" : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                }`}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -316,7 +350,9 @@ Try one of the quick prompts below or ask any question!`,
           </div>
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs font-sans select-text">
+          <div className={`flex-1 overflow-y-auto p-4 space-y-4 text-xs font-sans select-text ${
+            isDark ? "bg-slate-950/60" : "bg-slate-50/40"
+          }`}>
             {messages.map((msg) => (
               <div
                 key={msg.id}
@@ -325,16 +361,24 @@ Try one of the quick prompts below or ask any question!`,
                 }`}
               >
                 {msg.role === "assistant" && (
-                  <div className="w-6 h-6 rounded-lg bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 flex items-center justify-center shrink-0 mt-0.5">
+                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mt-0.5 shadow-sm border ${
+                    isDark
+                      ? "bg-cyan-950/80 border-cyan-800 text-cyan-400"
+                      : "bg-indigo-50 border-indigo-200 text-indigo-600"
+                  }`}>
                     <Sparkles className="w-3.5 h-3.5" />
                   </div>
                 )}
 
                 <div
-                  className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-md ${
+                  className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-sm leading-relaxed ${
                     msg.role === "user"
-                      ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-tr-none border border-indigo-400/20"
-                      : "bg-slate-800/80 text-slate-100 rounded-tl-none border border-slate-700/60 leading-relaxed"
+                      ? isDark
+                        ? "bg-gradient-to-r from-cyan-600 to-indigo-600 text-white rounded-tr-none"
+                        : "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-tr-none"
+                      : isDark
+                      ? "bg-slate-900/90 text-slate-100 rounded-tl-none border border-slate-800"
+                      : "bg-white text-slate-800 rounded-tl-none border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
                   }`}
                 >
                   {/* Content with Markdown-like Formatting */}
@@ -344,14 +388,16 @@ Try one of the quick prompts below or ask any question!`,
                     copiedCodeId={copiedCodeId}
                   />
 
-                  {/* Streaming indicator */}
+                  {/* Streaming pulse indicator */}
                   {isStreaming && msg.role === "assistant" && msg.content && (
-                    <span className="inline-block w-2 h-4 ml-1 bg-indigo-400 animate-pulse align-middle" />
+                    <span className={`inline-block w-2 h-3.5 ml-1 animate-pulse align-middle ${
+                      isDark ? "bg-cyan-400" : "bg-indigo-600"
+                    }`} />
                   )}
 
                   <div
                     className={`mt-1.5 text-[9px] font-mono text-right ${
-                      msg.role === "user" ? "text-indigo-200/70" : "text-slate-400"
+                      msg.role === "user" ? (isDark ? "text-cyan-200" : "text-indigo-200") : "text-slate-400"
                     }`}
                   >
                     {msg.timestamp}
@@ -359,7 +405,11 @@ Try one of the quick prompts below or ask any question!`,
                 </div>
 
                 {msg.role === "user" && (
-                  <div className="w-6 h-6 rounded-lg bg-slate-700 text-slate-300 flex items-center justify-center shrink-0 mt-0.5 border border-slate-600">
+                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mt-0.5 shadow-sm border ${
+                    isDark
+                      ? "bg-slate-800 text-slate-300 border-slate-700"
+                      : "bg-slate-200 text-slate-700 border-slate-300"
+                  }`}>
                     <User className="w-3.5 h-3.5" />
                   </div>
                 )}
@@ -368,20 +418,24 @@ Try one of the quick prompts below or ask any question!`,
 
             {/* Waiting for first stream token */}
             {isStreaming && messages[messages.length - 1]?.content === "" && (
-              <div className="flex items-center space-x-2 text-indigo-400 text-xs py-2">
-                <Sparkles className="w-4 h-4 animate-spin text-indigo-400" />
-                <span className="animate-pulse">Synthesizing verified protocol response...</span>
+              <div className={`flex items-center space-x-2 text-xs py-2 ${
+                isDark ? "text-cyan-400" : "text-indigo-600"
+              }`}>
+                <Sparkles className="w-4 h-4 animate-spin" />
+                <span className="animate-pulse font-medium">Synthesizing verified protocol response...</span>
               </div>
             )}
 
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Starter Chips (shown when few messages) */}
+          {/* Starter Prompts */}
           {messages.length <= 2 && !isStreaming && (
-            <div className="px-4 py-2 border-t border-slate-800/60 bg-slate-950/40">
-              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">
-                Suggested Questions:
+            <div className={`px-4 py-2.5 border-t ${
+              isDark ? "border-slate-800 bg-slate-900/60" : "border-slate-200 bg-white"
+            }`}>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+                Suggested Topics:
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                 {STARTER_PROMPTS.map((item, idx) => {
@@ -390,10 +444,16 @@ Try one of the quick prompts below or ask any question!`,
                     <button
                       key={idx}
                       onClick={() => handleSend(item.prompt)}
-                      className="text-left px-2.5 py-1.5 rounded-lg bg-slate-800/60 hover:bg-indigo-950/40 border border-slate-700/60 hover:border-indigo-500/40 text-slate-300 hover:text-indigo-200 transition text-[11px] flex items-center space-x-2 cursor-pointer group"
+                      className={`text-left px-2.5 py-1.5 rounded-xl border transition text-[11px] flex items-center space-x-2 cursor-pointer group shadow-sm ${
+                        isDark
+                          ? "bg-slate-950/80 hover:bg-slate-900 border-slate-800 hover:border-cyan-600/50 text-slate-300 hover:text-cyan-300"
+                          : "bg-slate-50 hover:bg-indigo-50/80 border-slate-200 hover:border-indigo-300 text-slate-700 hover:text-indigo-900"
+                      }`}
                     >
-                      <Icon className="w-3 h-3 text-indigo-400 group-hover:scale-110 transition shrink-0" />
-                      <span className="truncate font-medium">{item.title}</span>
+                      <Icon className={`w-3 h-3 group-hover:scale-110 transition shrink-0 ${
+                        isDark ? "text-cyan-400" : "text-indigo-600"
+                      }`} />
+                      <span className="truncate font-semibold">{item.title}</span>
                     </button>
                   );
                 })}
@@ -402,23 +462,29 @@ Try one of the quick prompts below or ask any question!`,
           )}
 
           {/* Input Bar */}
-          <div className="p-3 bg-slate-950/90 border-t border-slate-800">
+          <div className={`p-3 border-t ${
+            isDark ? "bg-slate-950 border-slate-800" : "bg-white border-slate-200"
+          }`}>
             <div className="relative flex items-end space-x-2">
               <textarea
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask about offline mesh, RSA/AES, replay defense..."
+                placeholder="Ask about RSA-OAEP, AES-GCM, BLE hop gossip, replay defense..."
                 rows={1}
                 disabled={isStreaming}
-                className="flex-1 min-h-[42px] max-h-32 px-3.5 py-2.5 bg-slate-800/90 border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl text-xs text-white placeholder-slate-400 resize-none outline-none disabled:opacity-50"
+                className={`flex-1 min-h-[42px] max-h-32 px-3.5 py-2.5 border rounded-2xl text-xs resize-none outline-none disabled:opacity-50 ${
+                  isDark
+                    ? "bg-slate-900/90 border-slate-800 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 text-white placeholder-slate-500"
+                    : "bg-slate-50 border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-900 placeholder-slate-400"
+                }`}
               />
 
               {isStreaming ? (
                 <button
                   onClick={handleStopStreaming}
-                  className="p-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white transition cursor-pointer shadow-lg shadow-rose-600/30 shrink-0"
+                  className="p-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition cursor-pointer shadow-md shadow-rose-600/20 shrink-0 tactile-btn"
                   title="Stop Generating"
                 >
                   <StopCircle className="w-4 h-4" />
@@ -427,7 +493,11 @@ Try one of the quick prompts below or ask any question!`,
                 <button
                   onClick={() => handleSend()}
                   disabled={!input.trim()}
-                  className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white transition cursor-pointer shadow-lg shadow-indigo-600/30 shrink-0"
+                  className={`p-2.5 rounded-xl text-white transition cursor-pointer shadow-md shrink-0 tactile-btn ${
+                    isDark
+                      ? "bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-600 shadow-cyan-600/20"
+                      : "bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 shadow-indigo-600/20"
+                  }`}
                   title="Send Question"
                 >
                   <Send className="w-4 h-4" />
@@ -436,8 +506,10 @@ Try one of the quick prompts below or ask any question!`,
             </div>
 
             <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400">
-              <span>Press <kbd className="px-1 py-0.5 rounded bg-slate-800 font-mono text-[9px]">Enter</kbd> to send</span>
-              <span className="font-mono text-emerald-400/80">AI Enabled</span>
+              <span>Press <kbd className={`px-1 py-0.5 rounded font-mono text-[9px] border ${
+                isDark ? "bg-slate-900 border-slate-800 text-slate-400" : "bg-slate-100 border-slate-200 text-slate-600"
+              }`}>Enter</kbd> to send</span>
+              <span className={`font-mono font-medium ${isDark ? "text-cyan-400" : "text-emerald-600"}`}>Groq AI Streaming</span>
             </div>
           </div>
         </div>
@@ -447,8 +519,7 @@ Try one of the quick prompts below or ask any question!`,
 }
 
 /**
- * Robust markdown formatter that cleanly renders headers, code blocks,
- * bullet lists, numbered lists, blockquotes, and inline formatting line-by-line
+ * Robust markdown formatter that renders tables, code blocks, lists and blockquotes in crisp Light Theme
  */
 function FormattedMessageContent({
   content,
@@ -462,14 +533,14 @@ function FormattedMessageContent({
   if (!content) return null;
 
   return (
-    <div className="text-xs leading-relaxed text-slate-100 space-y-2">
+    <div className="text-xs leading-relaxed space-y-2">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
           table({ children }) {
             return (
-              <div className="my-3 overflow-x-auto rounded-xl border border-slate-700 bg-slate-950/80 shadow-md">
-                <table className="min-w-full divide-y divide-slate-700 text-left text-xs">
+              <div className="my-3 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                <table className="min-w-full divide-y divide-slate-200 text-left text-xs">
                   {children}
                 </table>
               </div>
@@ -477,31 +548,31 @@ function FormattedMessageContent({
           },
           thead({ children }) {
             return (
-              <thead className="bg-slate-900 text-indigo-300 font-semibold uppercase tracking-wider text-[10px]">
+              <thead className="bg-slate-50 text-indigo-900 font-bold uppercase tracking-wider text-[10px]">
                 {children}
               </thead>
             );
           },
           tbody({ children }) {
-            return <tbody className="divide-y divide-slate-800">{children}</tbody>;
+            return <tbody className="divide-y divide-slate-100">{children}</tbody>;
           },
           tr({ children }) {
             return (
-              <tr className="hover:bg-slate-800/40 transition-colors odd:bg-slate-900/30 even:bg-slate-900/60">
+              <tr className="hover:bg-slate-50/70 transition-colors odd:bg-white even:bg-slate-50/30">
                 {children}
               </tr>
             );
           },
           th({ children }) {
             return (
-              <th className="px-3 py-2 text-indigo-300 font-bold border-b border-slate-700 whitespace-nowrap">
+              <th className="px-3 py-2 text-indigo-900 font-bold border-b border-slate-200 whitespace-nowrap">
                 {children}
               </th>
             );
           },
           td({ children }) {
             return (
-              <td className="px-3 py-2 text-slate-300 border-b border-slate-800/80 leading-normal">
+              <td className="px-3 py-2 text-slate-700 border-b border-slate-100 leading-normal">
                 {children}
               </td>
             );
@@ -514,7 +585,7 @@ function FormattedMessageContent({
             if (isInline) {
               return (
                 <code
-                  className="px-1.5 py-0.5 mx-0.5 rounded bg-slate-900 border border-slate-700 font-mono text-[10px] text-amber-300 font-medium"
+                  className="px-1.5 py-0.5 mx-0.5 rounded bg-slate-100 border border-slate-200 font-mono text-[10px] text-indigo-700 font-semibold"
                   {...props}
                 >
                   {children}
@@ -524,8 +595,8 @@ function FormattedMessageContent({
 
             const blockId = `code-${Math.random().toString(36).substring(2, 8)}`;
             return (
-              <div className="my-2.5 rounded-xl overflow-hidden border border-slate-700 bg-slate-950 font-mono text-[11px] shadow-lg">
-                <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900 border-b border-slate-800 text-slate-400 text-[10px]">
+              <div className="my-2.5 rounded-xl overflow-hidden border border-slate-200 bg-slate-900 font-mono text-[11px] shadow-sm">
+                <div className="flex items-center justify-between px-3 py-1.5 bg-slate-950 border-b border-slate-800 text-slate-400 text-[10px]">
                   <span className="uppercase font-semibold tracking-wider text-indigo-400">
                     {match ? match[1] : "code"}
                   </span>
@@ -546,7 +617,7 @@ function FormattedMessageContent({
                     )}
                   </button>
                 </div>
-                <pre className="p-3 overflow-x-auto text-emerald-300/90 whitespace-pre leading-relaxed">
+                <pre className="p-3 overflow-x-auto text-emerald-400 whitespace-pre leading-relaxed">
                   <code>{codeString}</code>
                 </pre>
               </div>
@@ -554,35 +625,35 @@ function FormattedMessageContent({
           },
           h1({ children }) {
             return (
-              <h2 className="text-base font-extrabold text-white mt-4 mb-2 pb-1 border-b border-slate-700">
+              <h2 className="text-base font-extrabold text-slate-900 mt-4 mb-2 pb-1 border-b border-slate-200">
                 {children}
               </h2>
             );
           },
           h2({ children }) {
             return (
-              <h3 className="text-sm font-bold text-white mt-3.5 mb-1.5 pb-0.5 border-b border-slate-800">
+              <h3 className="text-sm font-bold text-slate-900 mt-3.5 mb-1.5 pb-0.5 border-b border-slate-100">
                 {children}
               </h3>
             );
           },
           h3({ children }) {
             return (
-              <h4 className="text-xs font-bold text-indigo-300 mt-3 mb-1 tracking-wide">
+              <h4 className="text-xs font-bold text-indigo-700 mt-3 mb-1 tracking-wide">
                 {children}
               </h4>
             );
           },
           ul({ children }) {
             return (
-              <ul className="space-y-1 my-1.5 list-disc list-outside ml-4 text-slate-200">
+              <ul className="space-y-1 my-1.5 list-disc list-outside ml-4 text-slate-700">
                 {children}
               </ul>
             );
           },
           ol({ children }) {
             return (
-              <ol className="space-y-1 my-1.5 list-decimal list-outside ml-4 text-slate-200 font-medium">
+              <ol className="space-y-1 my-1.5 list-decimal list-outside ml-4 text-slate-700 font-medium">
                 {children}
               </ol>
             );
@@ -592,16 +663,16 @@ function FormattedMessageContent({
           },
           blockquote({ children }) {
             return (
-              <blockquote className="my-2 pl-3 border-l-2 border-indigo-400 bg-indigo-950/30 py-1.5 rounded-r text-slate-300 italic text-[11px]">
+              <blockquote className="my-2 pl-3 border-l-2 border-indigo-500 bg-indigo-50/50 py-1.5 rounded-r text-slate-700 italic text-[11px]">
                 {children}
               </blockquote>
             );
           },
           p({ children }) {
-            return <p className="leading-relaxed my-1.5">{children}</p>;
+            return <p className="leading-relaxed my-1.5 text-slate-700">{children}</p>;
           },
           strong({ children }) {
-            return <strong className="font-bold text-white">{children}</strong>;
+            return <strong className="font-bold text-slate-900">{children}</strong>;
           },
           a({ href, children }) {
             return (
@@ -609,14 +680,14 @@ function FormattedMessageContent({
                 href={href}
                 target="_blank"
                 rel="noreferrer"
-                className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2"
+                className="text-indigo-600 hover:text-indigo-800 underline underline-offset-2 font-medium"
               >
                 {children}
               </a>
             );
           },
           hr() {
-            return <hr className="my-3 border-slate-700" />;
+            return <hr className="my-3 border-slate-200" />;
           },
         }}
       >

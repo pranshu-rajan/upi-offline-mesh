@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     }
 
     const apiKey = process.env.GROQ_API_KEY?.trim();
-    let rawModel = process.env.GROQ_MODEL?.trim() || "openai/gpt-oss-120b";
+    const rawModel = process.env.GROQ_MODEL?.trim() || "openai/gpt-oss-120b";
 
     // Build ordered list of candidate models supported on Groq accounts
     const candidateModels = [
