@@ -57,9 +57,23 @@ public class DemoService {
         if (account == null) {
             account = new Account(vpa, holderName, balance, pubKeyBase64);
             accounts.save(account);
-        } else if (account.getDevicePublicKey() == null) {
-            account.setDevicePublicKey(pubKeyBase64);
-            accounts.save(account);
+        } else {
+            boolean updated = false;
+            if (account.getDevicePublicKey() == null) {
+                account.setDevicePublicKey(pubKeyBase64);
+                updated = true;
+            }
+            if (account.getLastSequenceNumber() == null) {
+                account.setLastSequenceNumber(0L);
+                updated = true;
+            }
+            if (account.getOfflineLimit() == null) {
+                account.setOfflineLimit(new BigDecimal("5000.00"));
+                updated = true;
+            }
+            if (updated) {
+                accounts.save(account);
+            }
         }
     }
 

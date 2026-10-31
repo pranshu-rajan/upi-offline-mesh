@@ -35,7 +35,7 @@ public class Account {
      * Strictly monotonic counter tracking the last settled transaction sequence number.
      * Prevents offline double-spending and sequence replay forks.
      */
-    @Column(nullable = false)
+    @Column(name = "last_sequence_number", columnDefinition = "bigint default 0")
     private Long lastSequenceNumber = 0L;
 
     /**
