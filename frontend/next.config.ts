@@ -8,7 +8,7 @@ const backendUrl =
   "https://upi-offline-mesh-rrm4.onrender.com";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  output: process.env.BUILD_STANDALONE === "true" ? "standalone" : undefined,
   turbopack: {
     root: path.resolve(__dirname),
   },

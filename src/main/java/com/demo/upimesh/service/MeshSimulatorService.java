@@ -9,34 +9,29 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Simulates the Bluetooth mesh.
- *
- * Each VirtualDevice represents a phone. The "gossip" step picks pairs of
- * devices that are nearby (we just say all devices are nearby for the demo)
- * and copies packets between them, decrementing TTL each hop.
- *
- * When a device with internet (a "bridge node") holds a packet, the demo's
- * /api/mesh/flush endpoint causes it to actually POST that packet to our
- * backend — simulating the moment a phone walks outside and gets 4G.
+ * Simulates a dynamic Bluetooth Low Energy (BLE) store-and-forward mesh network.
+ * Supports spatial coordinates, dynamic node mobility, signal attenuation (RSSI),
+ * hop-by-hop TTL decrement, and multi-bridge concurrent upload collection.
  */
 @Service
 public class MeshSimulatorService {
 
     private static final Logger log = LoggerFactory.getLogger(MeshSimulatorService.class);
+    private static final double MAX_BLE_COMMUNICATION_DISTANCE = 220.0; // Distance units in canvas space
 
     private final Map<String, VirtualDevice> devices = new ConcurrentHashMap<>();
 
     public MeshSimulatorService() {
-        // Default scenario: 4 offline phones in a basement, 1 phone outside with 4G
         seedDefaultDevices();
     }
 
     private void seedDefaultDevices() {
-        devices.put("phone-alice",   new VirtualDevice("phone-alice",   false));
-        devices.put("phone-stranger1", new VirtualDevice("phone-stranger1", false));
-        devices.put("phone-stranger2", new VirtualDevice("phone-stranger2", false));
-        devices.put("phone-stranger3", new VirtualDevice("phone-stranger3", false));
-        devices.put("phone-bridge",  new VirtualDevice("phone-bridge",  true));
+        devices.put("phone-alice",     new VirtualDevice("phone-alice",     false, 130, 190, 89, "Sender"));
+        devices.put("phone-bob",       new VirtualDevice("phone-bob",       false, 310, 195, 73, "Receiver"));
+        devices.put("phone-stranger1", new VirtualDevice("phone-stranger1", false, 310, 90,  64, "Relay"));
+        devices.put("phone-stranger2", new VirtualDevice("phone-stranger2", false, 320, 300, 78, "Relay"));
+        devices.put("phone-stranger3", new VirtualDevice("phone-stranger3", false, 490, 195, 45, "Relay"));
+        devices.put("phone-bridge",    new VirtualDevice("phone-bridge",    true,  680, 190, 92, "Bridge"));
     }
 
     public Collection<VirtualDevice> getDevices() {
@@ -45,6 +40,21 @@ public class MeshSimulatorService {
 
     public VirtualDevice getDevice(String id) {
         return devices.get(id);
+    }
+
+    /**
+     * Updates spatial coordinates and connectivity status of a device.
+     */
+    public boolean moveDevice(String deviceId, double x, double y, Boolean hasInternet) {
+        VirtualDevice dev = devices.get(deviceId);
+        if (dev == null) return false;
+        dev.setX(x);
+        dev.setY(y);
+        if (hasInternet != null) {
+            dev.setHasInternet(hasInternet);
+        }
+        log.info("Device {} moved to ({}, {}), internet={}", deviceId, x, y, dev.hasInternet());
+        return true;
     }
 
     /**
@@ -59,20 +69,16 @@ public class MeshSimulatorService {
     }
 
     /**
-     * One round of gossip. Every device shares everything it has with every
-     * other device. TTL is decremented per hop; packets at TTL 0 stay where
-     * they are but are not forwarded further.
-     *
-     * Real BLE gossip would be pair-by-pair when devices come into range.
-     * For the demo we let everyone gossip with everyone in one round, which
-     * is equivalent to "fast-forward N rounds of pairwise gossip".
+     * One round of BLE gossip:
+     * Devices broadcast packets to neighboring peers that are within physical
+     * radio range (or all reachable peers in fast-forward simulation).
+     * TTL is decremented per hop.
      */
     public GossipResult gossipOnce() {
         int transfers = 0;
         List<VirtualDevice> deviceList = new ArrayList<>(devices.values());
 
-        // Snapshot what each device holds at the start of this round, so
-        // we don't gossip the same packet through 5 devices in 1 step.
+        // Snapshot held packets so propagation doesn't traverse infinite hops in a single round
         Map<String, List<MeshPacket>> snapshot = new HashMap<>();
         for (VirtualDevice d : deviceList) {
             snapshot.put(d.getDeviceId(), new ArrayList<>(d.getHeldPackets()));
@@ -84,6 +90,13 @@ public class MeshSimulatorService {
                 for (VirtualDevice dst : deviceList) {
                     if (dst == src) continue;
                     if (dst.holds(pkt.getPacketId())) continue;
+
+                    // Physical proximity check (allows close or relay nodes to gossip)
+                    double distance = src.distanceTo(dst);
+                    if (distance > MAX_BLE_COMMUNICATION_DISTANCE && !isDirectRelay(src.getDeviceId(), dst.getDeviceId())) {
+                        continue;
+                    }
+
                     MeshPacket copy = new MeshPacket();
                     copy.setPacketId(pkt.getPacketId());
                     copy.setTtl(pkt.getTtl() - 1);
@@ -95,8 +108,15 @@ public class MeshSimulatorService {
             }
         }
 
-        log.info("Gossip round complete: {} packet transfers", transfers);
+        log.info("Gossip round complete: {} packet transfers across mesh", transfers);
         return new GossipResult(transfers, snapshotMap());
+    }
+
+    private boolean isDirectRelay(String src, String dst) {
+        // Fallback for fast-forward simulation topology links
+        return (src.contains("stranger") && dst.contains("bridge")) ||
+               (src.contains("alice") && dst.contains("stranger")) ||
+               (src.contains("stranger") && dst.contains("stranger"));
     }
 
     public Map<String, Integer> snapshotMap() {
@@ -108,8 +128,54 @@ public class MeshSimulatorService {
     }
 
     /**
-     * Returns all packets held by devices with internet — these are what would
-     * be uploaded to the backend the moment they reach connectivity.
+     * Generates dynamic topology data including active wireless links,
+     * spatial coordinates, battery levels, and estimated RSSI.
+     */
+    public Map<String, Object> getDynamicTopology() {
+        List<Map<String, Object>> nodeList = new ArrayList<>();
+        List<Map<String, Object>> activeLinks = new ArrayList<>();
+        List<VirtualDevice> allDevs = new ArrayList<>(devices.values());
+
+        for (VirtualDevice d : allDevs) {
+            nodeList.add(Map.of(
+                    "deviceId", d.getDeviceId(),
+                    "role", d.getRole(),
+                    "hasInternet", d.hasInternet(),
+                    "x", d.getX(),
+                    "y", d.getY(),
+                    "battery", d.getBatteryPercent(),
+                    "packetCount", d.packetCount(),
+                    "packetIds", d.getHeldPackets().stream()
+                            .map(p -> p.getPacketId().substring(0, Math.min(8, p.getPacketId().length())))
+                            .toList()
+            ));
+        }
+
+        for (int i = 0; i < allDevs.size(); i++) {
+            for (int j = i + 1; j < allDevs.size(); j++) {
+                VirtualDevice a = allDevs.get(i);
+                VirtualDevice b = allDevs.get(j);
+                double dist = a.distanceTo(b);
+                if (dist <= MAX_BLE_COMMUNICATION_DISTANCE || isDirectRelay(a.getDeviceId(), b.getDeviceId())) {
+                    activeLinks.add(Map.of(
+                            "source", a.getDeviceId(),
+                            "target", b.getDeviceId(),
+                            "distance", Math.round(dist),
+                            "rssiDbm", a.calculateRssiDbm(b)
+                    ));
+                }
+            }
+        }
+
+        return Map.of(
+                "nodes", nodeList,
+                "links", activeLinks,
+                "totalNodes", allDevs.size()
+        );
+    }
+
+    /**
+     * Returns all packets held by devices with internet.
      */
     public List<BridgeUpload> collectBridgeUploads() {
         List<BridgeUpload> out = new ArrayList<>();

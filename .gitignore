@@ -29,6 +29,7 @@ env/
 .env
 .env.local
 .env.*.local
+.server_keystore.properties
 
 # Logs
 *.log

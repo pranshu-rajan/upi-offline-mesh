@@ -11,13 +11,7 @@ import java.math.BigDecimal;
 import java.util.*;
 
 /**
- * Public REST surface.
- *
- * The endpoints split into three groups:
- *   /api/server-key      → so simulated senders can fetch the server's public key
- *   /api/mesh/*          → simulator endpoints (inject, gossip, flush)
- *   /api/bridge/ingest   → THE real production endpoint a real bridge node would hit
- *   /api/accounts, /api/transactions → for the dashboard
+ * Public REST surface for the UPI Offline Mesh settlement engine & simulator.
  */
 @CrossOrigin(origins = "*")
 @RestController
@@ -39,14 +33,15 @@ public class ApiController {
         return Map.of(
                 "publicKey", serverKey.getPublicKeyBase64(),
                 "algorithm", "RSA-2048 / OAEP-SHA256",
-                "hybridScheme", "RSA-OAEP encrypts an AES-256-GCM session key"
+                "deviceSignatureScheme", "ECDSA secp256r1 (SHA256withECDSA)",
+                "hybridScheme", "RSA-OAEP encrypts an ephemeral AES-256-GCM session key"
         );
     }
 
     // ---------------------------------------------------------------- demo
 
     /**
-     * Demo helper: build a packet on the server (simulating a sender phone)
+     * Demo helper: build a cryptographically signed packet on the sender phone
      * and inject it into the mesh at the given device.
      */
     @PostMapping("/demo/send")
@@ -60,7 +55,7 @@ public class ApiController {
 
         return ResponseEntity.ok(Map.of(
                 "packetId", packet.getPacketId(),
-                "ciphertextPreview", packet.getCiphertext().substring(0, 64) + "...",
+                "ciphertextPreview", packet.getCiphertext().substring(0, Math.min(64, packet.getCiphertext().length())) + "...",
                 "ttl", packet.getTtl(),
                 "injectedAt", startDevice
         ));
@@ -75,6 +70,68 @@ public class ApiController {
         public String startDevice;
     }
 
+    /**
+     * Security Attack Simulation: Offline Double-Spending / Sequence Replay Fork Attack.
+     * Alice attempts to sign TWO different payments using the exact same monotonic sequence number.
+     * The settlement engine will settle the first and reject the second with SEQUENCE_REPLAY_FORK.
+     */
+    @PostMapping("/demo/double-spend-attack")
+    public ResponseEntity<?> demoDoubleSpendAttack() throws Exception {
+        Account alice = accountRepo.findById("alice@demo").orElseThrow();
+        long attackSeq = alice.getLastSequenceNumber() + 1;
+
+        // Packet 1: Alice pays Bob ₹200 with sequence attackSeq
+        MeshPacket pkt1 = demo.createCustomPacket(
+                "alice@demo", "bob@demo", new BigDecimal("200.00"), "1234", 5, attackSeq, null);
+
+        // Packet 2: Alice attempts to spend the SAME offline sequence paying Carol ₹200
+        MeshPacket pkt2 = demo.createCustomPacket(
+                "alice@demo", "carol@demo", new BigDecimal("200.00"), "1234", 5, attackSeq, null);
+
+        // Upload packet 1
+        BridgeIngestionService.IngestResult res1 = bridge.ingest(pkt1, "bridge-node-1", 2);
+
+        // Upload conflicting packet 2 with same sequence number
+        BridgeIngestionService.IngestResult res2 = bridge.ingest(pkt2, "bridge-node-2", 2);
+
+        return ResponseEntity.ok(Map.of(
+                "firstAttempt", Map.of(
+                        "packetId", pkt1.getPacketId(),
+                        "outcome", res1.outcome(),
+                        "reason", res1.reason() == null ? "SUCCESS" : res1.reason()
+                ),
+                "secondConflictingAttempt", Map.of(
+                        "packetId", pkt2.getPacketId(),
+                        "outcome", res2.outcome(),
+                        "reason", res2.reason() == null ? "" : res2.reason()
+                ),
+                "explanation", "Second payment rejected due to monotonic sequence counter check, neutralizing the offline double-spending attack!"
+        ));
+    }
+
+    /**
+     * Security Attack Simulation: Forged Device Signature Attack.
+     * Simulates an adversarial node injecting an instruction with a corrupted or forged ECDSA signature.
+     */
+    @PostMapping("/demo/forged-signature-attack")
+    public ResponseEntity<?> demoForgedSignatureAttack() throws Exception {
+        Account alice = accountRepo.findById("alice@demo").orElseThrow();
+        long nextSeq = alice.getLastSequenceNumber() + 1;
+
+        // Create packet with completely bogus signature string
+        String fakeSignature = Base64.getEncoder().encodeToString("FORGED_ADVERSARIAL_DEVICE_SIGNATURE".getBytes());
+        MeshPacket packet = demo.createCustomPacket(
+                "alice@demo", "bob@demo", new BigDecimal("350.00"), "1234", 5, nextSeq, fakeSignature);
+
+        BridgeIngestionService.IngestResult r = bridge.ingest(packet, "rogue-mesh-node", 1);
+        return ResponseEntity.ok(Map.of(
+                "packetId", packet.getPacketId(),
+                "outcome", r.outcome(),
+                "reason", r.reason() == null ? "" : r.reason(),
+                "defenseMechanism", "ECDSA P-256 Device Hardware Non-Repudiation Check"
+        ));
+    }
+
     // -------------------------------------------------------------- mesh sim
 
     @GetMapping("/mesh/state")
@@ -83,10 +140,14 @@ public class ApiController {
         for (VirtualDevice d : mesh.getDevices()) {
             deviceData.add(Map.of(
                     "deviceId", d.getDeviceId(),
+                    "role", d.getRole(),
                     "hasInternet", d.hasInternet(),
                     "packetCount", d.packetCount(),
+                    "battery", d.getBatteryPercent(),
+                    "x", d.getX(),
+                    "y", d.getY(),
                     "packetIds", d.getHeldPackets().stream()
-                            .map(p -> p.getPacketId().substring(0, 8))
+                            .map(p -> p.getPacketId().substring(0, Math.min(8, p.getPacketId().length())))
                             .toList()
             ));
         }
@@ -94,6 +155,25 @@ public class ApiController {
                 "devices", deviceData,
                 "idempotencyCacheSize", idempotency.size()
         );
+    }
+
+    @GetMapping("/mesh/topology")
+    public Map<String, Object> meshTopology() {
+        return mesh.getDynamicTopology();
+    }
+
+    @PostMapping("/mesh/move-device")
+    public ResponseEntity<?> moveDevice(@RequestBody Map<String, Object> body) {
+        String deviceId = (String) body.get("deviceId");
+        Number x = (Number) body.get("x");
+        Number y = (Number) body.get("y");
+        Boolean hasInternet = (Boolean) body.get("hasInternet");
+
+        if (deviceId == null || x == null || y == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "deviceId, x, and y are required"));
+        }
+        boolean ok = mesh.moveDevice(deviceId, x.doubleValue(), y.doubleValue(), hasInternet);
+        return ResponseEntity.ok(Map.of("updated", ok, "deviceId", deviceId));
     }
 
     @PostMapping("/mesh/gossip")
@@ -105,27 +185,18 @@ public class ApiController {
         );
     }
 
-    /**
-     * "All bridge nodes simultaneously walk outside and get 4G."
-     * They all upload everything they hold to /api/bridge/ingest.
-     *
-     * THIS is the moment the duplicate-storm idempotency case is tested:
-     * if multiple bridge nodes hold the same packet, the server gets multiple
-     * concurrent POSTs of the same ciphertext, and only one should settle.
-     */
     @PostMapping("/mesh/flush")
     public Map<String, Object> meshFlush() {
         List<MeshSimulatorService.BridgeUpload> uploads = mesh.collectBridgeUploads();
 
         List<Map<String, Object>> results = new ArrayList<>();
-        // Upload them in parallel to actually exercise concurrent idempotency.
         uploads.parallelStream().forEach(up -> {
             BridgeIngestionService.IngestResult r =
                     bridge.ingest(up.packet(), up.bridgeNodeId(), 5 - up.packet().getTtl());
             synchronized (results) {
                 results.add(Map.of(
                         "bridgeNode", up.bridgeNodeId(),
-                        "packetId", up.packet().getPacketId().substring(0, 8),
+                        "packetId", up.packet().getPacketId().substring(0, Math.min(8, up.packet().getPacketId().length())),
                         "outcome", r.outcome(),
                         "reason", r.reason() == null ? "" : r.reason(),
                         "transactionId", r.transactionId() == null ? -1 : r.transactionId()
@@ -148,11 +219,6 @@ public class ApiController {
 
     // -------------------------------------------------------------- bridge
 
-    /**
-     * THE PRODUCTION ENDPOINT.
-     * In a real deployment, the Android app's bridge logic POSTs here whenever
-     * the device has internet and is holding mesh packets.
-     */
     @PostMapping("/bridge/ingest")
     public ResponseEntity<?> ingest(
             @RequestBody MeshPacket packet,

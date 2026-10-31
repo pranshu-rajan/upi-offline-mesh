@@ -7,13 +7,14 @@ import java.math.BigDecimal;
  * it gets one of these.
  *
  * Critical fields for security:
- *   - nonce: a UUID unique to this payment. Even if everything else were identical
- *            for two legitimate payments (alice sends bob ₹100 twice), the nonces
- *            differ, so the resulting ciphertexts and their hashes also differ.
- *   - signedAt: lets the server reject stale packets ("freshness window"). Without
- *               this, an attacker who got the ciphertext could replay it weeks later.
- *   - pinHash: in a real system the user enters a UPI PIN; we'd verify it against
- *              a hash held by the bank. Here we just record it for realism.
+ *   - nonce: a UUID unique to this payment intent.
+ *   - signedAt: lets the server reject stale packets ("freshness window").
+ *   - pinHash: simulated hash of the user's offline authorized PIN.
+ *   - sequenceNumber: strictly monotonic counter per sender account; prevents
+ *                     offline balance double-spending and sequence forks.
+ *   - deviceSignature: cryptographic ECDSA (P-256) hardware signature over the
+ *                      canonical payload, guaranteeing non-repudiation.
+ *   - devicePublicKey: public key of the signing mobile device.
  */
 public class PaymentInstruction {
 
@@ -21,19 +22,31 @@ public class PaymentInstruction {
     private String receiverVpa;
     private BigDecimal amount;
     private String pinHash;
-    private String nonce;     // UUID, unique per payment intent
-    private Long signedAt;    // epoch millis, when sender signed
+    private String nonce;            // UUID, unique per payment intent
+    private Long signedAt;           // epoch millis, when sender signed
+    private Long sequenceNumber;     // Monotonic counter per sender device (prevents offline replay/fork)
+    private String deviceSignature;  // Base64 ECDSA signature
+    private String devicePublicKey;  // Base64 ECDSA public key
 
     public PaymentInstruction() {}
 
     public PaymentInstruction(String senderVpa, String receiverVpa, BigDecimal amount,
                               String pinHash, String nonce, Long signedAt) {
+        this(senderVpa, receiverVpa, amount, pinHash, nonce, signedAt, null, null, null);
+    }
+
+    public PaymentInstruction(String senderVpa, String receiverVpa, BigDecimal amount,
+                              String pinHash, String nonce, Long signedAt,
+                              Long sequenceNumber, String deviceSignature, String devicePublicKey) {
         this.senderVpa = senderVpa;
         this.receiverVpa = receiverVpa;
         this.amount = amount;
         this.pinHash = pinHash;
         this.nonce = nonce;
         this.signedAt = signedAt;
+        this.sequenceNumber = sequenceNumber;
+        this.deviceSignature = deviceSignature;
+        this.devicePublicKey = devicePublicKey;
     }
 
     public String getSenderVpa() { return senderVpa; }
@@ -53,4 +66,13 @@ public class PaymentInstruction {
 
     public Long getSignedAt() { return signedAt; }
     public void setSignedAt(Long signedAt) { this.signedAt = signedAt; }
+
+    public Long getSequenceNumber() { return sequenceNumber; }
+    public void setSequenceNumber(Long sequenceNumber) { this.sequenceNumber = sequenceNumber; }
+
+    public String getDeviceSignature() { return deviceSignature; }
+    public void setDeviceSignature(String deviceSignature) { this.deviceSignature = deviceSignature; }
+
+    public String getDevicePublicKey() { return devicePublicKey; }
+    public void setDevicePublicKey(String devicePublicKey) { this.devicePublicKey = devicePublicKey; }
 }

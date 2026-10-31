@@ -41,6 +41,9 @@ export interface SupabaseAccount {
   holder_name: string;
   balance: number;
   version: number;
+  device_public_key?: string;
+  last_sequence_number?: number;
+  offline_limit?: number;
 }
 
 export interface SupabaseTransaction {

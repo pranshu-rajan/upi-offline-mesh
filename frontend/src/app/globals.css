@@ -3,7 +3,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* 
- * Dual Theme System: 2026 Award-Winning Light Theme + DPI-Packet-Analyser Dark Theme
+ * 2026 Hyper-Refined Glassmorphism 3.0 & Cyber-Spatial Radar Theme
  */
 
 :root {
@@ -11,25 +11,27 @@
   --foreground: #0f172a;
   --card-bg: rgba(255, 255, 255, 0.92);
   --card-border: rgba(226, 232, 240, 0.85);
-  --panel-bg: rgba(255, 255, 255, 0.86);
+  --panel-bg: rgba(255, 255, 255, 0.88);
   --panel-border: rgba(226, 232, 240, 0.9);
-  --panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.02), 0 8px 32px -4px rgba(15, 23, 42, 0.06);
+  --panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.02), 0 12px 36px -4px rgba(15, 23, 42, 0.07);
   --accent-primary: #4f46e5;
   --accent-secondary: #0284c7;
   --accent-emerald: #059669;
+  --accent-glow: rgba(99, 102, 241, 0.15);
 }
 
 .dark, [data-theme="dark"] {
-  --background: #020617;
+  --background: #030712;
   --foreground: #f8fafc;
-  --card-bg: rgba(15, 23, 42, 0.75);
+  --card-bg: rgba(15, 23, 42, 0.78);
   --card-border: rgba(255, 255, 255, 0.08);
-  --panel-bg: rgba(15, 23, 42, 0.8);
-  --panel-border: rgba(255, 255, 255, 0.08);
-  --panel-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.6);
+  --panel-bg: rgba(15, 23, 42, 0.84);
+  --panel-border: rgba(255, 255, 255, 0.1);
+  --panel-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.75);
   --accent-primary: #6366f1;
   --accent-secondary: #38bdf8;
   --accent-emerald: #10b981;
+  --accent-glow: rgba(99, 102, 241, 0.28);
 }
 
 body {
@@ -44,123 +46,102 @@ body {
 /* Ambient Radial Illuminations */
 html:not(.dark) body {
   background-image: 
-    radial-gradient(at 15% 10%, rgba(99, 102, 241, 0.06) 0px, transparent 40%),
-    radial-gradient(at 85% 15%, rgba(16, 185, 129, 0.05) 0px, transparent 45%),
-    radial-gradient(at 50% 90%, rgba(14, 165, 233, 0.04) 0px, transparent 50%),
-    radial-gradient(#e2e8f0 1px, transparent 1px);
+    radial-gradient(at 15% 10%, rgba(99, 102, 241, 0.07) 0px, transparent 40%),
+    radial-gradient(at 85% 15%, rgba(16, 185, 129, 0.06) 0px, transparent 45%),
+    radial-gradient(at 50% 90%, rgba(14, 165, 233, 0.05) 0px, transparent 50%),
+    radial-gradient(#e2e8f0 1.2px, transparent 1.2px);
   background-size: 100% 100%, 100% 100%, 100% 100%, 24px 24px;
 }
 
 html.dark body, [data-theme="dark"] body {
-  background-color: #020617;
+  background-color: #030712;
   background-image: 
-    radial-gradient(at 15% 10%, rgba(99, 102, 241, 0.12) 0px, transparent 40%),
-    radial-gradient(at 85% 15%, rgba(16, 185, 129, 0.1) 0px, transparent 45%),
-    radial-gradient(at 50% 90%, rgba(56, 189, 248, 0.08) 0px, transparent 50%),
-    radial-gradient(rgba(30, 41, 59, 0.6) 1px, transparent 1px);
+    radial-gradient(at 15% 10%, rgba(99, 102, 241, 0.14) 0px, transparent 40%),
+    radial-gradient(at 85% 15%, rgba(16, 185, 129, 0.12) 0px, transparent 45%),
+    radial-gradient(at 50% 90%, rgba(56, 189, 248, 0.1) 0px, transparent 50%),
+    radial-gradient(rgba(30, 41, 59, 0.65) 1.2px, transparent 1.2px);
   background-size: 100% 100%, 100% 100%, 100% 100%, 24px 24px;
 }
 
 /* Frosted Glassmorphism Surfaces */
 .glass-panel {
   background: var(--panel-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--panel-border);
   box-shadow: var(--panel-shadow);
-  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 .glass-card {
   background: var(--card-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--card-border);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02), 0 4px 16px -2px rgba(15, 23, 42, 0.04);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02), 0 6px 20px -2px rgba(15, 23, 42, 0.04);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-card:hover {
-  border-color: rgba(99, 102, 241, 0.35);
-  box-shadow: 0 4px 20px -2px rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.45);
+  box-shadow: 0 8px 28px -2px var(--accent-glow);
 }
 
 .dark .glass-card:hover {
-  border-color: rgba(99, 102, 241, 0.5);
-  box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.25);
+  border-color: rgba(99, 102, 241, 0.6);
+  box-shadow: 0 10px 32px -4px var(--accent-glow);
 }
 
-/* Blueprint / Cyber Radar Grid for Canvas & Charts */
+/* Dynamic Conduit Waves & Radar Grid */
 .mesh-canvas-bg {
-  background-color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.7);
   background-image: 
-    radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.03) 0%, transparent 70%),
+    radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.04) 0%, transparent 75%),
     radial-gradient(#cbd5e1 1.2px, transparent 1.2px);
-  background-size: 100% 100%, 20px 20px;
+  background-size: 100% 100%, 22px 22px;
 }
 
 .dark .mesh-canvas-bg {
-  background-color: #030712;
+  background-color: rgba(2, 6, 23, 0.85);
   background-image: 
-    radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 70%),
-    radial-gradient(rgba(51, 65, 85, 0.5) 1.2px, transparent 1.2px);
-  background-size: 100% 100%, 20px 20px;
+    radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 75%),
+    radial-gradient(rgba(51, 65, 85, 0.6) 1.2px, transparent 1.2px);
+  background-size: 100% 100%, 22px 22px;
 }
 
-/* Interactive Tactile Micro-Physics */
-.tactile-btn {
-  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease;
+/* Specular Shimmer Animations */
+@keyframes wirePulse {
+  0% { stroke-dashoffset: 60; }
+  100% { stroke-dashoffset: 0; }
 }
 
-.tactile-btn:active {
-  transform: scale(0.97);
+.animate-wire-flow {
+  stroke-dasharray: 6 6;
+  animation: wirePulse 1.2s linear infinite;
 }
 
-/* Theme Toggle Button */
-.theme-toggle-btn {
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+@keyframes radarSweep {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
-.theme-toggle-btn:hover {
-  transform: translateY(-1px);
+.animate-radar-sweep {
+  transform-origin: center;
+  animation: radarSweep 6s linear infinite;
 }
 
-/* Custom Refined Scrollbar */
+/* Scrollbar polish */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-
 ::-webkit-scrollbar-track {
-  background: rgba(241, 245, 249, 0.7);
+  background: transparent;
 }
-
-.dark ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
-}
-
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.4);
-  border-radius: 6px;
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
 }
-
-.dark ::-webkit-scrollbar-thumb {
-  background: rgba(71, 85, 105, 0.5);
-}
-
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.6);
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.8);
-}
-
-@keyframes pulseSlow {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.8; transform: scale(0.985); }
-}
-
-.animate-pulse-slow {
-  animation: pulseSlow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  background: rgba(148, 163, 184, 0.6);
 }

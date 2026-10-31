@@ -18,7 +18,7 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8080")
 app = FastAPI(
     title="UPI Offline Mesh — Edge Gateway",
     description="Edge bridge gateway service simulating BLE packet receivers and forwarding to the Spring Boot core settlement engine.",
-    version="1.0.0",
+    version="1.1.0",
 )
 
 app.add_middleware(
@@ -76,7 +76,11 @@ async def gateway_info():
         "gatewayMode": "BLE_BRIDGE_COLLECTOR",
         "backendTarget": BACKEND_URL,
         "backendStatus": backend_status,
-        "supportedAlgorithms": ["RSA-2048-OAEP", "AES-256-GCM"],
+        "supportedAlgorithms": [
+            "RSA-2048-OAEP",
+            "AES-256-GCM",
+            "ECDSA-secp256r1"
+        ],
     }
 
 

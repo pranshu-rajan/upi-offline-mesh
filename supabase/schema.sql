@@ -4,13 +4,21 @@
 -- Run this SQL in your Supabase SQL Editor (Dashboard > SQL Editor > New Query)
 -- to create tables, indexes, constraints, RLS policies, and realtime replication.
 
--- 1. Create accounts table
+-- 1. Create accounts table with device hardware signing and sequence tracking
 CREATE TABLE IF NOT EXISTS public.accounts (
     vpa VARCHAR(64) PRIMARY KEY,
     holder_name VARCHAR(128) NOT NULL,
     balance NUMERIC(19, 2) NOT NULL CHECK (balance >= 0),
-    version BIGINT NOT NULL DEFAULT 0
+    version BIGINT NOT NULL DEFAULT 0,
+    device_public_key TEXT,
+    last_sequence_number BIGINT NOT NULL DEFAULT 0,
+    offline_limit NUMERIC(19, 2) DEFAULT 5000.00
 );
+
+-- In case accounts table already exists from an earlier migration:
+ALTER TABLE public.accounts ADD COLUMN IF NOT EXISTS device_public_key TEXT;
+ALTER TABLE public.accounts ADD COLUMN IF NOT EXISTS last_sequence_number BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE public.accounts ADD COLUMN IF NOT EXISTS offline_limit NUMERIC(19, 2) DEFAULT 5000.00;
 
 -- 2. Create transactions ledger table
 CREATE TABLE IF NOT EXISTS public.transactions (
@@ -26,7 +34,15 @@ CREATE TABLE IF NOT EXISTS public.transactions (
     status VARCHAR(32) NOT NULL DEFAULT 'SETTLED'
 );
 
--- 3. Create mesh audit logs table (Optional edge packet observation tracker)
+-- 3. Create durable idempotency audit records table
+CREATE TABLE IF NOT EXISTS public.idempotency_records (
+    packet_hash VARCHAR(64) PRIMARY KEY,
+    claimed_at TIMESTAMPTZ NOT NULL,
+    outcome VARCHAR(32) NOT NULL DEFAULT 'CLAIMED',
+    bridge_node_id VARCHAR(64)
+);
+
+-- 4. Create mesh audit logs table (Optional edge packet observation tracker)
 CREATE TABLE IF NOT EXISTS public.mesh_audit_logs (
     id BIGSERIAL PRIMARY KEY,
     packet_id VARCHAR(64) NOT NULL,
@@ -36,27 +52,29 @@ CREATE TABLE IF NOT EXISTS public.mesh_audit_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 4. Create indexes for high-throughput queries
+-- 5. Create indexes for high-throughput queries
 CREATE INDEX IF NOT EXISTS idx_transactions_packet_hash ON public.transactions(packet_hash);
 CREATE INDEX IF NOT EXISTS idx_transactions_sender_vpa ON public.transactions(sender_vpa);
 CREATE INDEX IF NOT EXISTS idx_transactions_receiver_vpa ON public.transactions(receiver_vpa);
 CREATE INDEX IF NOT EXISTS idx_transactions_settled_at ON public.transactions(settled_at DESC);
+CREATE INDEX IF NOT EXISTS idx_idempotency_claimed_at ON public.idempotency_records(claimed_at DESC);
 
--- 5. Seed initial demo accounts if not already present
-INSERT INTO public.accounts (vpa, holder_name, balance, version)
+-- 6. Seed initial demo accounts if not already present
+INSERT INTO public.accounts (vpa, holder_name, balance, version, last_sequence_number, offline_limit)
 VALUES
-    ('alice@demo', 'Alice', 5000.00, 0),
-    ('bob@demo', 'Bob', 1000.00, 0),
-    ('carol@demo', 'Carol', 2500.00, 0),
-    ('dave@demo', 'Dave', 500.00, 0)
+    ('alice@demo', 'Alice', 5000.00, 0, 0, 5000.00),
+    ('bob@demo',   'Bob',   1000.00, 0, 0, 5000.00),
+    ('carol@demo', 'Carol', 2500.00, 0, 0, 5000.00),
+    ('dave@demo',  'Dave',  500.00,  0, 0, 5000.00)
 ON CONFLICT (vpa) DO NOTHING;
 
--- 6. Enable Row Level Security (RLS)
+-- 7. Enable Row Level Security (RLS)
 ALTER TABLE public.accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.idempotency_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mesh_audit_logs ENABLE ROW LEVEL SECURITY;
 
--- 7. RLS Policies: Allow read-only access for anonymous and authenticated clients
+-- 8. RLS Policies: Allow read-only access for anonymous and authenticated clients
 -- (Write permissions are executed by the Spring Boot backend via direct connection or service role)
 DROP POLICY IF EXISTS "Allow public read accounts" ON public.accounts;
 CREATE POLICY "Allow public read accounts" ON public.accounts
@@ -66,12 +84,14 @@ DROP POLICY IF EXISTS "Allow public read transactions" ON public.transactions;
 CREATE POLICY "Allow public read transactions" ON public.transactions
     FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Allow public read idempotency_records" ON public.idempotency_records;
+CREATE POLICY "Allow public read idempotency_records" ON public.idempotency_records
+    FOR SELECT USING (true);
+
 DROP POLICY IF EXISTS "Allow public read mesh_audit_logs" ON public.mesh_audit_logs;
 CREATE POLICY "Allow public read mesh_audit_logs" ON public.mesh_audit_logs
     FOR SELECT USING (true);
 
--- 8. Enable Supabase Realtime for instant UI push updates
--- When the settlement engine settles a transaction in Postgres, the Next.js UI
--- receives a WebSocket event and updates immediately without polling lag!
+-- 9. Enable Supabase Realtime for instant UI push updates
 ALTER PUBLICATION supabase_realtime ADD TABLE public.accounts;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.transactions;
