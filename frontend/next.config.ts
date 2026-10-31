@@ -2,10 +2,12 @@ import type { NextConfig } from "next";
 
 import path from "path";
 
-const backendUrl =
+const rawBackendUrl =
   process.env.BACKEND_INTERNAL_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
   "https://upi-offline-mesh-rrm4.onrender.com";
+
+const backendBaseUrl = rawBackendUrl.replace(/\/api\/?$/, "");
 
 const nextConfig: NextConfig = {
   output: process.env.BUILD_STANDALONE === "true" ? "standalone" : undefined,
@@ -16,7 +18,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/backend-api/:path*",
-        destination: `${backendUrl}/api/:path*`,
+        destination: `${backendBaseUrl}/api/:path*`,
       },
     ];
   },
